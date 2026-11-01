@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Batcave</title>
+<meta name="description" content="Batcave puts every coding agent on your team on one board: claims, live presence, shared decisions, requests, handoffs and an edit guard. Works with Claude Code, Codex, Gemini CLI, Cursor, Copilot CLI, OpenCode and more.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Night in a cave: ink ground, stone surfaces, fog text, a lamp-amber signal and a cool agent cyan.
+     Layout idea: a long scroll where pinned scenes play a team's day as you move through it. */
+  --ink:#0A0B0D; --stone:#14161A; --stone-2:#1C1F24; --line:#2A2E35;
+  --fog:#ECEAE4; --muted:#A3A19A; --dim:#6E6C66;
+  --lamp:#F2B544; --agent:#7FD1E3; --ok:#9BD48E; --warn:#F28C6B;
+  --display:'Bricolage Grotesque', 'Avenir Next', 'Segoe UI', system-ui, sans-serif;
+  --body:'Geist', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --mono:'Geist Mono', 'SF Mono', Menlo, Consolas, monospace;
+  --w:1180px;
+  color-scheme: dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--ink);color:var(--fog);font:16px/1.6 var(--body);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:var(--fog)}
+:focus-visible{outline:2px solid var(--lamp);outline-offset:3px;border-radius:6px}
+h1,h2,h3{font-family:var(--display);font-weight:600;letter-spacing:-.02em;text-wrap:balance;margin:0}
+p{margin:0}
+.wrap{max-width:var(--w);margin:0 auto;padding:0 24px}
+.mono{font-family:var(--mono)}
+.eyebrow{font:500 13px/1 var(--mono);color:var(--lamp);letter-spacing:.06em;text-transform:uppercase}
+
+/* progress + nav */
+.progress{position:fixed;inset:0 0 auto 0;height:2px;background:var(--lamp);transform-origin:0 50%;transform:scaleX(0);z-index:60}
+nav.top{position:fixed;inset:0 0 auto 0;z-index:50;backdrop-filter:blur(12px);background:rgba(10,11,13,.6);border-bottom:1px solid transparent;transition:border-color .3s}
+nav.top.scrolled{border-bottom-color:var(--line)}
+nav.top .wrap{display:flex;align-items:center;justify-content:space-between;height:60px;gap:16px}
+.brand{display:flex;align-items:center;gap:10px;font:700 18px var(--display);text-decoration:none;color:var(--fog)}
+.brand svg{flex:none}
+nav.top .links{display:flex;gap:6px;align-items:center}
+nav.top .links a{color:var(--muted);text-decoration:none;font-size:14px;padding:8px 12px;border-radius:8px}
+nav.top .links a:hover{color:var(--fog);background:var(--stone)}
+@media (max-width:720px){nav.top .links a.opt{display:none}}
+
+.btn{display:inline-flex;align-items:center;gap:8px;height:46px;padding:0 20px;border-radius:12px;font:600 15px var(--body);text-decoration:none;border:1px solid var(--line);color:var(--fog);background:var(--stone);cursor:pointer;transition:transform .2s, background .2s}
+.btn:hover{transform:translateY(-1px);background:var(--stone-2)}
+.btn.primary{background:var(--lamp);color:#1A1306;border-color:var(--lamp)}
+.btn.primary:hover{background:#F6C565}
+
+/* hero */
+.hero{position:relative;padding:150px 0 96px;overflow:hidden}
+.hero canvas{position:absolute;inset:0;width:100%;height:100%;opacity:.9}
+.hero .wrap{position:relative;display:grid;grid-template-columns:minmax(0,1fr);gap:28px}
+.hero h1{font-size:clamp(48px,8.4vw,112px);line-height:.95;font-weight:800;max-width:11ch}
+.hero h1 .glow{color:var(--lamp)}
+.hero .lede{font-size:clamp(18px,2vw,22px);color:var(--muted);max-width:56ch}
+.hero .cta{display:flex;gap:12px;flex-wrap:wrap}
+.cmd{display:inline-flex;align-items:center;gap:12px;max-width:100%;background:var(--stone);border:1px solid var(--line);border-radius:12px;padding:10px 10px 10px 16px;font:14px var(--mono);color:var(--fog)}
+.cmd code{overflow-x:auto;white-space:nowrap}
+.cmd .dollar{color:var(--dim)}
+.copy{flex:none;height:32px;padding:0 12px;border-radius:8px;border:1px solid var(--line);background:var(--stone-2);color:var(--muted);font:500 12px var(--body);cursor:pointer}
+.copy:hover{color:var(--fog)}
+.hero .meta{display:flex;gap:18px;flex-wrap:wrap;color:var(--dim);font:13px var(--mono)}
+
+/* reveal: visible at rest, animated only when JS marks the page */
+.js .reveal{opacity:0;transform:translateY(28px);transition:opacity .9s cubic-bezier(.2,.7,.2,1), transform .9s cubic-bezier(.2,.7,.2,1)}
+.js .reveal.in{opacity:1;transform:none}
+
+/* manifesto: words light up with scroll */
+.manifesto{padding:120px 0}
+.manifesto p{font:600 clamp(30px,4.4vw,58px)/1.12 var(--display);letter-spacing:-.02em;max-width:22ch}
+.manifesto .w{color:var(--fog);transition:color .2s}
+.js .manifesto .w{color:#3A3C40}
+.js .manifesto .w.lit{color:var(--fog)}
+.js .manifesto .w.lit.hot{color:var(--lamp)}
+
+/* pinned scenes */
+.scene{position:relative}
+.scene .pin{position:sticky;top:0;min-height:100vh;display:flex;align-items:center;padding:90px 0 40px}
+.js .scene.tall{height:320vh}
+.scene .grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:56px;align-items:center}
+@media (max-width:900px){.scene .grid{grid-template-columns:1fr;gap:28px}.js .scene.tall{height:300vh}.scene .pin{align-items:flex-start;padding-top:80px}}
+.steps{display:grid;gap:6px;margin-top:28px}
+.step{padding:14px 16px;border-radius:12px;border:1px solid transparent;color:var(--dim);transition:all .4s}
+.step b{display:block;color:inherit;font:600 17px var(--body);margin-bottom:2px}
+.step span{font-size:15px}
+.step.on{color:var(--fog);background:var(--stone);border-color:var(--line)}
+.step.on b{color:var(--lamp)}
+.scene h2{font-size:clamp(34px,4.6vw,60px);line-height:1.02}
+.scene .sub{color:var(--muted);font-size:18px;margin-top:16px;max-width:44ch}
+@media (max-width:900px){.steps{grid-template-columns:repeat(2,1fr)}.step{padding:10px 12px}.step span{display:none}#guardSteps{display:none}.scene .sub{font-size:16px}}
+@media (max-width:640px){.term{min-height:0;font-size:11px}.term .body{padding:8px 10px}.roomline{font-size:12px;padding:8px 10px}.hero canvas{opacity:.45}}
+
+/* board */
+.board{background:var(--stone);border:1px solid var(--line);border-radius:20px;padding:18px;box-shadow:0 40px 80px -30px rgba(0,0,0,.7)}
+.board .bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.board .bar .who{display:flex}
+.av{width:30px;height:30px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font:700 11px var(--body);color:#0A0B0D;border:2px solid var(--stone);flex:none}
+.av + .av{margin-left:-8px}
+.lanes{position:relative;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;min-height:300px}
+.lane{background:var(--ink);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.lane h4{margin:0 0 4px;font:600 12px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.card{background:var(--stone-2);border:1px solid var(--line);border-radius:10px;padding:10px;font-size:13px;line-height:1.35}
+.card .id{font:11px var(--mono);color:var(--dim)}
+.card .t{font-weight:600;margin:3px 0 6px}
+.card .row{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
+.card .row .av{width:20px;height:20px;font-size:8px;border-width:0}
+.mover{position:absolute;width:calc(25% - 7.5px);top:34px;left:0;transition:none;z-index:2;box-shadow:0 18px 40px -10px rgba(242,181,68,.25);border-color:rgba(242,181,68,.55)}
+.mover .state{display:inline-block;margin-top:6px;font:500 11px var(--mono);padding:2px 8px;border-radius:20px;background:rgba(242,181,68,.12);color:var(--lamp)}
+@media (max-width:560px){.lanes{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}.lane{padding:6px}.card{padding:7px;font-size:11px}.card .row{display:none}.lane h4{font-size:9px}.mover{width:calc(25% - 4.5px)}}
+
+/* terminals */
+.terms{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:640px){.terms{grid-template-columns:1fr}}
+.term{background:#08090B;border:1px solid var(--line);border-radius:14px;overflow:hidden;font:12.5px/1.65 var(--mono);min-height:240px}
+.term .tb{display:flex;align-items:center;gap:6px;padding:9px 12px;border-bottom:1px solid var(--line);color:var(--muted);font-size:12px}
+.term .tb i{width:9px;height:9px;border-radius:50%;background:#2E3238}
+.term .tb span{margin-left:8px}
+.term .body{padding:12px 14px;display:flex;flex-direction:column;gap:2px}
+.ln{white-space:pre-wrap;word-break:break-word;transition:opacity .35s, transform .35s}
+.js .ln.off{opacity:0;transform:translateY(6px)}
+.ln .p{color:var(--lamp)} .ln .t{color:var(--agent)} .ln .m{color:var(--dim)} .ln .g{color:var(--ok)}
+.guard{margin-top:8px;border:1px solid var(--warn);border-radius:8px;padding:8px 10px;color:var(--fog);background:rgba(242,140,107,.07)}
+.guard b{color:var(--warn);font-weight:500}
+.roomline{margin-top:14px;display:flex;align-items:center;gap:10px;background:var(--stone);border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:14px}
+.roomline .dot{width:8px;height:8px;border-radius:50%;background:var(--agent);flex:none}
+
+/* features */
+.features{padding:130px 0 60px}
+.features h2,.works h2,.install h2{font-size:clamp(34px,4.6vw,60px);line-height:1.02;max-width:18ch}
+.fgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:48px}
+@media (max-width:900px){.fgrid{grid-template-columns:1fr 1fr}}
+@media (max-width:560px){.fgrid{grid-template-columns:1fr}}
+.f{background:var(--stone);border:1px solid var(--line);border-radius:18px;padding:24px;display:grid;gap:10px;align-content:start;transition:border-color .3s, transform .3s}
+.f:hover{border-color:#3A3F47;transform:translateY(-2px)}
+.f svg{color:var(--lamp)}
+.f h3{font-size:22px}
+.f p{color:var(--muted);font-size:15px}
+.f code{font:13px var(--mono);color:var(--agent)}
+
+/* works with */
+.works{padding:110px 0}
+.agents{margin-top:44px;border-top:1px solid var(--line)}
+.agent{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:20px;align-items:center;padding:20px 0;border-bottom:1px solid var(--line)}
+.agent .n{font:600 clamp(24px,3.4vw,40px)/1.1 var(--display);letter-spacing:-.02em}
+.agent .how{color:var(--dim);font:13px var(--mono)}
+.tag{font:500 12px var(--mono);padding:5px 10px;border-radius:20px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.tag.full{color:var(--ok);border-color:rgba(155,212,142,.35)}
+@media (max-width:640px){.agent{grid-template-columns:1fr auto}.agent .how{display:none}}
+
+/* install */
+.install{padding:110px 0 140px}
+.tabs{display:flex;gap:6px;margin-top:40px;flex-wrap:wrap}
+.tabs button{height:42px;padding:0 16px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--muted);font:500 14px var(--body);cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--stone);color:var(--fog);border-color:#3A3F47}
+.panel{margin-top:14px;background:var(--stone);border:1px solid var(--line);border-radius:18px;padding:22px;display:grid;gap:14px}
+.panel[hidden]{display:none}
+.panel pre{margin:0;background:var(--ink);border:1px solid var(--line);border-radius:12px;padding:16px 18px;overflow-x:auto;font:14px/1.7 var(--mono);color:var(--fog)}
+.panel pre .c{color:var(--dim)}
+.panel p{color:var(--muted)}
+.panel .head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+
+footer{border-top:1px solid var(--line);padding:40px 0;color:var(--dim);font-size:14px}
+footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+footer a{color:var(--muted)}
+
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+  .js .reveal,.js .ln.off{opacity:1;transform:none;transition:none}
+  .js .scene.tall{height:auto}
+  .scene .pin{position:relative}
+}
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+
+<nav class="top" id="nav" aria-label="Main">
+  <div class="wrap">
+    <a class="brand" href="#top">
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12" fill="none" stroke="#F2B544" stroke-width="1.6"/><circle cx="13" cy="8" r="2.4" fill="#F2B544"/><circle cx="8" cy="16.5" r="2.4" fill="#7FD1E3"/><circle cx="18" cy="16.5" r="2.4" fill="#ECEAE4"/><path d="M13 8 8 16.5h10Z" fill="none" stroke="#ECEAE4" stroke-width="1"/></svg>
+      Batcave
+    </a>
+    <div class="links">
+      <a class="opt" href="#board">Board</a>
+      <a class="opt" href="#guard">Guard</a>
+      <a class="opt" href="#works">Agents</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/solanki-aman/batcave">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <canvas id="net" aria-hidden="true"></canvas>
+  <div class="wrap">
+    <span class="eyebrow">Open source · MIT · v0.2</span>
+    <h1>Your agents, on the <span class="glow">same team.</span></h1>
+    <p class="lede">Batcave gives every coding agent on your team one board, live presence, shared decisions and a guard that stops them from overwriting each other. Everyone keeps their own agent and their own account.</p>
+    <div class="cta">
+      <a class="btn primary" href="#install">Get started</a>
+      <a class="btn" href="https://github.com/solanki-aman/batcave">View on GitHub</a>
+    </div>
+    <div class="cmd"><span class="dollar">$</span><code id="cmd1">npx github:solanki-aman/batcave init</code><button class="copy" data-copy="cmd1" type="button">Copy</button></div>
+    <div class="meta"><span>Zero dependencies</span><span>Node 18+</span><span>9 agents</span><span>Self-hosted</span></div>
+  </div>
+</header>
+
+<section class="manifesto" aria-label="Why Batcave">
+  <div class="wrap">
+    <p id="manifesto">Every developer has an agent now. None of those agents knows what the others are doing. Two of them just edited the same file. Batcave puts them on one board, under one set of decisions, behind one guard.</p>
+  </div>
+</section>
+
+<section class="scene tall" id="board" aria-label="The board">
+  <div class="pin">
+    <div class="wrap grid">
+      <div>
+        <span class="eyebrow">One board</span>
+        <h2 class="reveal">Claim it. Your agent takes it from there.</h2>
+        <p class="sub reveal">Cards move on their own as hooks see agents start work, open pull requests and merge. Nobody drags anything.</p>
+        <div class="steps" id="boardSteps">
+          <div class="step on"><b>Claim</b><span><code class="mono">/batcave:claim T-9</code> names the branch and loads the context.</span></div>
+          <div class="step"><b>Agent running</b><span>The first edit moves the card. Teammates see what it is touching.</span></div>
+          <div class="step"><b>In review</b><span><code class="mono">gh pr create</code> moves it again and links the PR.</span></div>
+          <div class="step"><b>Done</b><span>Merged. It counts toward the week's shipped work.</span></div>
+        </div>
+      </div>
+      <div class="board" role="img" aria-label="Kanban board: card T-9 moves from Claimed to Agent running, In review and Done">
+        <div class="bar">
+          <span class="mono" style="color:var(--muted);font-size:13px">acme-web · board</span>
+          <span class="who">
+            <span class="av" style="background:#F2B544">AS</span><span class="av" style="background:#7FD1E3">NK</span><span class="av" style="background:#ECEAE4">PR</span><span class="av" style="background:#9BD48E">LW</span>
+          </span>
+        </div>
+        <div class="lanes" id="lanes">
+          <div class="lane"><h4>Claimed</h4>
+            <div class="card" style="visibility:hidden"><div class="id">.</div><div class="t">.</div><div class="row">.</div></div>
+            <div class="card"><div class="id">T-5 · plan step 5</div><div class="t">Checkout copy pass</div><div class="row"><span class="av" style="background:#ECEAE4">PR</span>Priya</div></div>
+          </div>
+          <div class="lane"><h4>Running</h4>
+            <div class="card" style="visibility:hidden"><div class="id">.</div><div class="t">.</div><div class="row">.</div></div>
+            <div class="card"><div class="id">T-4 · plan step 2</div><div class="t">Audit surface tokens</div><div class="row"><span class="av" style="background:#7FD1E3">NK</span>Codex</div></div>
+          </div>
+          <div class="lane"><h4>Review</h4>
+            <div class="card" style="visibility:hidden"><div class="id">.</div><div class="t">.</div><div class="row">.</div></div>
+            <div class="card"><div class="id">T-6 · issue #362</div><div class="t">Refund webhook retries</div><div class="row"><span class="av" style="background:#9BD48E">LW</span>PR #409</div></div>
+          </div>
+          <div class="lane"><h4>Done</h4>
+            <div class="card" style="visibility:hidden"><div class="id">.</div><div class="t">.</div><div class="row">.</div></div>
+            <div class="card"><div class="id">T-1</div><div class="t">Extract checkout header</div><div class="row"><span class="av" style="background:#F2B544">AS</span>yesterday</div></div>
+          </div>
+          <div class="card mover" id="mover"><div class="id">T-9 · plan step 4</div><div class="t">Dark mode receipts</div><div class="row"><span class="av" style="background:#F2B544">AS</span>Aman · Claude Code</div><span class="state" id="moverState">claimed</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="scene tall" id="guard" aria-label="The guard">
+  <div class="pin">
+    <div class="wrap grid">
+      <div>
+        <span class="eyebrow">The guard</span>
+        <h2 class="reveal">Different vendors. One guard.</h2>
+        <p class="sub reveal">Nate runs Codex. Aman runs Claude Code. When Aman's agent reaches for a file Nate's agent changed four minutes ago, Batcave stops and asks first.</p>
+        <div class="steps" id="guardSteps">
+          <div class="step on"><b>Nate's agent edits</b><span>The edit is recorded: who, which task, when.</span></div>
+          <div class="step"><b>Aman's agent reaches for it</b><span>The pre-edit hook checks with the team.</span></div>
+          <div class="step"><b>Batcave asks first</b><span>Aman decides. No silent overwrite.</span></div>
+          <div class="step"><b>They talk</b><span>The question lands in Nate's room instead.</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="terms">
+          <div class="term" aria-label="Nate's terminal running Codex">
+            <div class="tb"><i></i><i></i><i></i><span>nate · codex</span></div>
+            <div class="body" id="t1">
+              <div class="ln" data-at="0.02"><span class="p">›</span> audit the surface tokens for dark mode</div>
+              <div class="ln" data-at="0.08"><span class="t">●</span> Read src/theme/tokens.ts</div>
+              <div class="ln" data-at="0.14"><span class="t">●</span> Update src/theme/tokens.ts <span class="g">+18 -4</span></div>
+              <div class="ln" data-at="0.20"><span class="m">  batcave: edit shared with the team</span></div>
+              <div class="ln" data-at="0.86"><span class="t">●</span> <span class="m">room #t4:</span> Aman asks about an email-safe token</div>
+            </div>
+          </div>
+          <div class="term" aria-label="Aman's terminal running Claude Code">
+            <div class="tb"><i></i><i></i><i></i><span>aman · claude code</span></div>
+            <div class="body" id="t2">
+              <div class="ln" data-at="0.30"><span class="p">›</span> make the receipt email follow the dark theme</div>
+              <div class="ln" data-at="0.38"><span class="t">●</span> Read src/emails/receipt.tsx</div>
+              <div class="ln" data-at="0.46"><span class="t">●</span> Update src/theme/tokens.ts</div>
+              <div class="ln guard" data-at="0.54"><b>Batcave guard</b>  Nate's agent edited this 4m ago (T-4). Allow this edit?  <b>no</b></div>
+              <div class="ln" data-at="0.68"><span class="t">●</span> Skipped. Asked Nate in his room.</div>
+              <div class="ln" data-at="0.76"><span class="t">●</span> Update src/emails/receipt.tsx <span class="g">+24 -6</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="roomline ln" data-at="0.84" id="roomline"><span class="dot"></span><span><b>#t4</b> <span style="color:var(--muted)">Aman's agent:</span> Receipts need an email-safe surface token. Can it land with T-4?</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="features" id="features" aria-label="Features">
+  <div class="wrap">
+    <span class="eyebrow">Everything a team needs</span>
+    <h2 class="reveal" style="margin-top:14px">Shared context, pushed into every agent.</h2>
+    <div class="fgrid">
+      <article class="f reveal">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v4M5 9h14l-1 11H6z"/><path d="M9 13h6"/></svg>
+        <h3>Decisions</h3><p>Pin it once, every teammate's agent follows it. <code>/batcave:decide Reuse surface tokens.</code></p>
+      </article>
+      <article class="f reveal">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v10H8l-4 4z"/><path d="M9 10h6"/></svg>
+        <h3>Requests</h3><p>Ask a teammate's agent for help. It runs only if they choose to, in their own session, on their own account.</p>
+      </article>
+      <article class="f reveal">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h12M12 6l6 6-6 6"/><path d="M20 4v16"/></svg>
+        <h3>Handoff</h3><p>Branch, summary, todos and decisions in one packet. The next person starts with full context.</p>
+      </article>
+      <article class="f reveal">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2.5"/><path d="M3 20c0-3.5 3-6 6-6s6 2.5 6 6M15 15c3 0 6 1.5 6 5"/></svg>
+        <h3>People</h3><p>Who is online, whose agent is running, what it is touching right now, and what shipped this week.</p>
+      </article>
+      <article class="f reveal">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>
+        <h3>Pulse</h3><p>What shipped, what waits on you, what is running and which claims went stale, in one briefing.</p>
+      </article>
+      <article class="f reveal">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg>
+        <h3>Dashboard</h3><p>The board, people, rooms and decisions in a browser, for the teammates who never open a terminal.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="works" id="works" aria-label="Supported agents">
+  <div class="wrap">
+    <span class="eyebrow">Works with</span>
+    <h2 class="reveal" style="margin-top:14px">Bring whichever agent you like.</h2>
+    <div class="agents">
+      <div class="agent reveal"><span class="n">Claude Code</span><span class="how">plugin</span><span class="tag full">full support</span></div>
+      <div class="agent reveal"><span class="n">Codex CLI</span><span class="how">batcave init</span><span class="tag full">full support</span></div>
+      <div class="agent reveal"><span class="n">Gemini CLI · Antigravity</span><span class="how">batcave init</span><span class="tag full">full support</span></div>
+      <div class="agent reveal"><span class="n">Cursor</span><span class="how">batcave init</span><span class="tag full">full support</span></div>
+      <div class="agent reveal"><span class="n">GitHub Copilot CLI</span><span class="how">batcave init</span><span class="tag full">full support</span></div>
+      <div class="agent reveal"><span class="n">OpenCode</span><span class="how">batcave init</span><span class="tag full">full support</span></div>
+      <div class="agent reveal"><span class="n">Kiro · Windsurf</span><span class="how">batcave init</span><span class="tag">tools</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="install" id="install" aria-label="Install">
+  <div class="wrap">
+    <span class="eyebrow">Get started</span>
+    <h2 class="reveal" style="margin-top:14px">Two minutes to a shared board.</h2>
+    <div class="tabs" role="tablist" aria-label="Install options">
+      <button role="tab" id="tab-server" aria-selected="true" aria-controls="p-server" type="button">1 · Start a server</button>
+      <button role="tab" id="tab-claude" aria-selected="false" aria-controls="p-claude" type="button">2 · Claude Code</button>
+      <button role="tab" id="tab-other" aria-selected="false" aria-controls="p-other" type="button">2 · Every other agent</button>
+    </div>
+    <div class="panel" role="tabpanel" id="p-server" aria-labelledby="tab-server">
+      <div class="head"><p>One person, once per team. No dependencies to install.</p><button class="copy" data-copy="code-server" type="button">Copy</button></div>
+<pre id="code-server">git clone https://github.com/solanki-aman/batcave && cd batcave
+export BATCAVE_TEAM=acme
+export BATCAVE_TEAM_TOKEN=$(node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))")
+node server/src/index.mjs</pre>
+      <p>For a real team, run the Dockerfile in <code class="mono">server/</code> behind HTTPS and share the URL and token privately.</p>
+    </div>
+    <div class="panel" role="tabpanel" id="p-claude" aria-labelledby="tab-claude" hidden>
+      <div class="head"><p>In Claude Code:</p><button class="copy" data-copy="code-claude" type="button">Copy</button></div>
+<pre id="code-claude">/plugin marketplace add solanki-aman/batcave
+/plugin install batcave@batcave
+/batcave:setup</pre>
+    </div>
+    <div class="panel" role="tabpanel" id="p-other" aria-labelledby="tab-other" hidden>
+      <div class="head"><p>Finds Codex, Gemini CLI, Antigravity, Cursor, Copilot CLI, OpenCode, Kiro and Windsurf, and wires each one up.</p><button class="copy" data-copy="code-other" type="button">Copy</button></div>
+<pre id="code-other">npx github:solanki-aman/batcave init \
+  --url https://batcave.example.com --token &lt;team token&gt; \
+  --user aman --name "Aman" --repo</pre>
+      <p>Undo any time with <code class="mono">batcave uninstall</code>. Edited files keep a backup.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>Batcave · MIT licensed · self-hosted</span>
+    <span><a href="https://github.com/solanki-aman/batcave">GitHub</a> · <a href="https://github.com/solanki-aman/batcave#readme">Docs</a></span>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  document.documentElement.classList.add('js');
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+
+  // copy buttons
+  $$('.copy').forEach((b) => b.addEventListener('click', async () => {
+    const text = $('#' + b.dataset.copy).textContent;
+    try { await navigator.clipboard.writeText(text); b.textContent = 'Copied'; }
+    catch { b.textContent = 'Select and copy'; }
+    setTimeout(() => (b.textContent = 'Copy'), 1600);
+  }));
+
+  // tabs
+  const tabs = $$('[role=tab]');
+  tabs.forEach((t) => t.addEventListener('click', () => {
+    tabs.forEach((x) => { x.setAttribute('aria-selected', x === t); $('#' + x.getAttribute('aria-controls')).hidden = x !== t; });
+  }));
+
+  // manifesto words
+  const man = $('#manifesto');
+  const hot = new Set(['one', 'board,', 'decisions,', 'guard.']);
+  man.innerHTML = man.textContent.split(' ').map((w) => `<span class="w${hot.has(w) ? ' hotword' : ''}">${w}</span>`).join(' ');
+  const words = $$('.w', man);
+
+  // reveal on enter
+  if (!reduce && 'IntersectionObserver' in window) {
+    const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { rootMargin: '0px 0px -10% 0px' });
+    $$('.reveal').forEach((el, i) => { el.style.transitionDelay = (el.closest('.fgrid, .agents') ? (i % 6) * 70 : 0) + 'ms'; io.observe(el); });
+  } else {
+    $$('.reveal').forEach((el) => el.classList.add('in'));
+  }
+
+  // scroll-driven scenes
+  const nav = $('#nav'), bar = $('#progress');
+  const boardScene = $('#board'), guardScene = $('#guard');
+  const mover = $('#mover'), moverState = $('#moverState'), lanes = $('#lanes');
+  const boardSteps = $$('#boardSteps .step'), guardSteps = $$('#guardSteps .step');
+  const guardLines = $$('#guard .ln');
+  const STATES = ['claimed', 'agent running', 'in review', 'done'];
+
+  function progressOf(el) {
+    const r = el.getBoundingClientRect();
+    const span = el.offsetHeight - innerHeight;
+    return span > 0 ? clamp(-r.top / span) : (r.top < innerHeight / 2 ? 1 : 0);
+  }
+
+  function frame() {
+    const doc = document.documentElement;
+    bar.style.transform = `scaleX(${clamp(scrollY / (doc.scrollHeight - innerHeight))})`;
+    nav.classList.toggle('scrolled', scrollY > 20);
+
+    // manifesto: light words as the paragraph crosses the screen
+    const mr = man.getBoundingClientRect();
+    const mp = reduce ? 1 : clamp((innerHeight * 0.85 - mr.top) / (mr.height + innerHeight * 0.35));
+    const lit = Math.round(mp * words.length);
+    words.forEach((w, i) => { w.classList.toggle('lit', i < lit); w.classList.toggle('hot', i < lit && w.classList.contains('hotword')); });
+
+    // board: the card travels across four lanes
+    const bp = reduce ? 0.999 : progressOf(boardScene);
+    const pos = bp * 3; // 0..3 lanes
+    const laneW = lanes.clientWidth / 4;
+    mover.style.transform = `translateX(${pos * laneW}px) rotate(${Math.sin(pos * Math.PI) * 2}deg)`;
+    const idx = Math.min(3, Math.round(pos));
+    moverState.textContent = STATES[idx];
+    boardSteps.forEach((s, i) => s.classList.toggle('on', i === idx));
+
+    // guard: lines appear on cue
+    const gp = reduce ? 1 : progressOf(guardScene);
+    guardLines.forEach((l) => l.classList.toggle('off', gp < Number(l.dataset.at)));
+    const gi = gp < 0.28 ? 0 : gp < 0.5 ? 1 : gp < 0.8 ? 2 : 3;
+    guardSteps.forEach((s, i) => s.classList.toggle('on', i === gi));
+  }
+  let ticking = false;
+  addEventListener('scroll', () => { if (!ticking) { ticking = true; requestAnimationFrame(() => { frame(); ticking = false; }); } }, { passive: true });
+  addEventListener('resize', frame);
+  frame();
+
+  // hero network: agents orbit, signals travel to the hub
+  const cv = $('#net'), ctx = cv.getContext('2d');
+  const COLORS = ['#F2B544', '#7FD1E3', '#ECEAE4', '#9BD48E', '#F28C6B'];
+  let W, H, hub, nodes = [], pulses = [], t0 = performance.now();
+  function size() {
+    const dpr = Math.min(2, devicePixelRatio || 1);
+    W = cv.clientWidth; H = cv.clientHeight; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    hub = { x: W > 900 ? W * 0.76 : W * 0.5, y: W > 900 ? H * 0.5 : H * 0.22 };
+    const R = Math.min(W, H) * (W > 900 ? 0.34 : 0.3);
+    nodes = Array.from({ length: 14 }, (_, i) => ({ a: (i / 14) * Math.PI * 2, r: R * (0.55 + (i % 3) * 0.22), s: 0.00006 + (i % 4) * 0.00002, c: COLORS[i % COLORS.length], z: 2 + (i % 3) }));
+  }
+  function draw(now) {
+    const t = now - t0;
+    ctx.clearRect(0, 0, W, H);
+    const pts = nodes.map((n) => ({ x: hub.x + Math.cos(n.a + t * n.s) * n.r, y: hub.y + Math.sin(n.a + t * n.s) * n.r * 0.62, n }));
+    ctx.lineWidth = 1;
+    for (const p of pts) { ctx.strokeStyle = 'rgba(236,234,228,0.07)'; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(hub.x, hub.y); ctx.stroke(); }
+    if (Math.random() < 0.06 && !reduce) pulses.push({ i: Math.floor(Math.random() * pts.length), k: 0, out: Math.random() < 0.4 });
+    pulses = pulses.filter((q) => q.k <= 1);
+    for (const q of pulses) {
+      const p = pts[q.i]; const k = q.out ? 1 - q.k : q.k;
+      const x = p.x + (hub.x - p.x) * k, y = p.y + (hub.y - p.y) * k;
+      ctx.fillStyle = q.out ? '#7FD1E3' : '#F2B544'; ctx.globalAlpha = 0.9; ctx.beginPath(); ctx.arc(x, y, 2.2, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+      q.k += 0.012;
+    }
+    for (const p of pts) { ctx.fillStyle = p.n.c; ctx.globalAlpha = 0.85; ctx.beginPath(); ctx.arc(p.x, p.y, p.n.z, 0, 7); ctx.fill(); }
+    ctx.globalAlpha = 1;
+    const g = ctx.createRadialGradient(hub.x, hub.y, 0, hub.x, hub.y, 90);
+    g.addColorStop(0, 'rgba(242,181,68,0.35)'); g.addColorStop(1, 'rgba(242,181,68,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(hub.x, hub.y, 90, 0, 7); ctx.fill();
+    ctx.fillStyle = '#F2B544'; ctx.beginPath(); ctx.arc(hub.x, hub.y, 7, 0, 7); ctx.fill();
+    if (!reduce) requestAnimationFrame(draw);
+  }
+  size(); addEventListener('resize', size);
+  requestAnimationFrame(draw);
+})();
+</script>
+</body>
+</html>
