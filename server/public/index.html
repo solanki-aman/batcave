@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Batcave</title>
+<style>
+:root{--ivory:#FAF9F5;--slate:#141413;--muted:#5E5D59;--line:rgba(31,30,29,.15);--line2:rgba(31,30,29,.3);--clay:#D97757;--oat:#F0EEE6;--paper:#FFFFFF;--ok:#3F6B2F}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ivory);color:var(--slate);font:14px/1.45 'Anthropic Sans',system-ui,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
+header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 24px;border-bottom:.5px solid var(--line);flex-wrap:wrap}
+h1{font:500 20px 'Anthropic Serif',Georgia,serif;margin:0}
+nav{display:flex;gap:2px}
+nav button,.chip{border:none;background:none;padding:8px 12px;border-radius:8px;color:var(--muted);font:inherit;cursor:pointer}
+nav button[aria-current=page]{background:rgba(115,114,108,.1);color:var(--slate);font-weight:600}
+.who{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+input,textarea,select{font:inherit;border:.5px solid var(--line2);border-radius:10px;padding:0 12px;height:40px;background:var(--paper);color:var(--slate)}
+textarea{height:auto;padding:10px 12px}
+.btn{height:40px;padding:0 14px;border-radius:10px;border:.5px solid var(--line2);background:var(--paper);color:var(--slate);font:inherit;cursor:pointer}
+.btn.primary{border:none;background:var(--slate);color:var(--ivory);font-weight:600}
+.btn.clay{border:none;background:var(--clay);color:var(--slate);font-weight:600}
+.btn.small{height:34px;font-size:13px}
+main{padding:20px 24px}
+.lanes{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;align-items:start}
+@media(max-width:1100px){.lanes{grid-template-columns:1fr 1fr}}
+@media(max-width:640px){.lanes{grid-template-columns:1fr}}
+.lane{background:var(--oat);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.lane h2{font-size:14px;margin:2px 4px;display:flex;justify-content:space-between}
+.lane h2 span{color:var(--muted);font-weight:400}
+.card{background:var(--paper);border:.5px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.card.stale{border:1px dashed #87867F}
+.meta{font-size:12px;color:var(--muted)}
+.mono{font-family:'Anthropic Mono','JetBrains Mono','SF Mono',Monaco,monospace;font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.title{font-weight:600}
+.av{width:28px;height:28px;border-radius:50%;background:var(--slate);color:var(--ivory);font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.people{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.pcard{background:var(--paper);border:.5px solid var(--line);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px}
+.badge{font-size:12px;font-weight:600;border-radius:10px;padding:3px 9px;background:#F5F4ED}
+.badge.run{border:1px solid var(--clay)}
+.badge.on{background:#EEF3E9;color:var(--ok)}
+.now{background:#F5F4ED;border-radius:10px;padding:10px 12px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);text-align:center}
+.stats b{display:block;font:400 24px 'Anthropic Serif',Georgia,serif}
+.rooms{display:grid;grid-template-columns:240px minmax(0,1fr);gap:16px}
+@media(max-width:800px){.rooms{grid-template-columns:1fr}}
+.roomlist{display:flex;flex-direction:column;gap:2px}
+.roomlist button{display:block;width:100%;text-align:left;padding:10px;border-radius:8px;border:none;background:none;font:inherit;cursor:pointer;color:var(--slate)}
+.roomlist button[aria-current=true]{background:rgba(115,114,108,.1);font-weight:600}
+.msgs{background:var(--paper);border:.5px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px;min-height:420px}
+.msg.event{color:var(--muted);font-size:13px}
+.msg .author{font-weight:600}
+.msg.agent .author{color:#A24E33}
+.sr{position:absolute;left:-9999px}
+.empty{color:var(--muted);padding:12px}
+</style>
+</head>
+<body>
+<header>
+  <div class="row" style="gap:20px">
+    <h1>Batcave <span id="team" class="meta"></span></h1>
+    <nav aria-label="Views">
+      <button data-view="board" aria-current="page">Board</button>
+      <button data-view="people">People</button>
+      <button data-view="rooms">Rooms</button>
+      <button data-view="decisions">Decisions</button>
+    </nav>
+  </div>
+  <form class="who" id="whoForm">
+    <label class="sr" for="uid">Your handle</label><input id="uid" placeholder="handle (e.g. aman)" size="12">
+    <label class="sr" for="uname">Display name</label><input id="uname" placeholder="name" size="10">
+    <label class="sr" for="utoken">Team token</label><input id="utoken" type="password" placeholder="team token" size="12">
+    <button class="btn small" type="submit">Save</button>
+  </form>
+</header>
+<main id="app"><p class="empty">Loading…</p></main>
+<script>
+const S = { view: 'board', room: 'team', state: null, messages: [] };
+const ls = { get(k){ try { return localStorage.getItem(k) || ''; } catch { return S['_'+k] || ''; } }, set(k,v){ try { localStorage.setItem(k,v); } catch { S['_'+k]=v; } } };
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const initials = (n) => esc(String(n||'?').split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase());
+const ago = (t) => { const m = Math.round((Date.now()-t)/60000); return m<1?'now':m<60?m+'m':m<1440?Math.round(m/60)+'h':Math.round(m/1440)+'d'; };
+
+function headers(){ return { 'content-type':'application/json', 'x-batcave-user': ls.get('uid'), 'x-batcave-name': encodeURIComponent(ls.get('uname')||ls.get('uid')), authorization: 'Bearer '+ls.get('utoken') }; }
+async function api(method, path, body){
+  const r = await fetch(path, { method, headers: headers(), body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(()=>({}));
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+
+async function refresh(){
+  if (!ls.get('uid')) { document.getElementById('app').innerHTML = '<p class="empty">Enter your handle, name and team token above to join.</p>'; return; }
+  try {
+    S.state = await api('GET','/api/state');
+    document.getElementById('team').textContent = '· ' + S.state.team;
+    if (S.view === 'rooms') S.messages = await api('GET', `/api/rooms/${encodeURIComponent(S.room)}/messages?limit=100`);
+    render();
+  } catch (e) { document.getElementById('app').innerHTML = `<p class="empty">Could not load: ${esc(e.message)}</p>`; }
+}
+
+const nameOf = (id) => S.state.people.find(p=>p.id===id)?.name || id;
+const LANES = [['backlog','Backlog'],['claimed','Claimed'],['running','Agent running'],['review','In review'],['done','Done']];
+
+function taskCard(t){
+  const owner = t.owner ? `<div class="row"><span class="av">${initials(nameOf(t.owner))}</span><span class="meta">${esc(nameOf(t.owner))}${t.stale?' · no activity '+ago(t.lastActivity):''}</span></div>` : '';
+  const action = t.status==='backlog' ? `<button class="btn clay small" data-claim="${esc(t.id)}">Claim</button>`
+    : t.stale && t.owner!==ls.get('uid') ? `<button class="btn small" data-claim="${esc(t.id)}" data-force="1">Take over</button>` : '';
+  return `<article class="card${t.stale?' stale':''}">
+    <div class="meta">${esc(t.id)} · ${esc(t.source)}</div>
+    <div class="title">${esc(t.title)}</div>
+    ${t.branch?`<div class="mono">${esc(t.branch)}</div>`:''}
+    ${t.pr?`<div class="mono">${esc(t.pr)}</div>`:''}
+    ${owner}${action}
+  </article>`;
+}
+
+function renderBoard(){
+  const tasks = S.state.tasks;
+  return `<form id="newTask" class="row" style="margin-bottom:16px">
+      <label class="sr" for="nt">New task</label><input id="nt" placeholder="New task title" style="flex:1;min-width:220px">
+      <button class="btn primary" type="submit">Add to backlog</button></form>
+    <div class="lanes">${LANES.map(([k,label])=>{
+      const list = tasks.filter(t=>t.status===k).sort((a,b)=>b.updatedAt-a.updatedAt);
+      return `<section class="lane" aria-label="${label}"><h2>${label} <span>${list.length}</span></h2>${list.map(taskCard).join('') || '<div class="empty">Nothing here</div>'}</section>`;
+    }).join('')}</div>`;
+}
+
+function renderPeople(){
+  const me = ls.get('uid');
+  const order = {'agent running':0, online:1, away:2, offline:3};
+  const people = [...S.state.people].sort((a,b)=>(order[a.presence]-order[b.presence]) || a.name.localeCompare(b.name));
+  if (!people.length) return '<p class="empty">No one has joined yet.</p>';
+  return `<div class="people">${people.map(p=>{
+    const badge = p.presence==='agent running'?'<span class="badge run">Agent running</span>':p.presence==='online'?'<span class="badge on">Online</span>':`<span class="badge">${esc(p.presence)}</span>`;
+    const task = S.state.tasks.find(t=>t.id===p.task);
+    return `<article class="pcard">
+      <div class="row"><span class="av" style="width:44px;height:44px;font-size:14px">${initials(p.name)}</span>
+        <div style="flex:1"><div class="title">${esc(p.name)}${p.id===me?' <span class="meta">(you)</span>':''}</div><div class="meta">${esc(p.role||p.id)}</div></div>${badge}</div>
+      <div class="now"><div class="meta">Now · ${ago(p.since||p.lastSeen)}</div><div>${esc(p.now||'idle')}</div>${task?`<div class="mono">${esc(task.id)} · ${esc(task.branch||task.title)}</div>`:''}</div>
+      <div class="stats"><div><b>${p.stats.shipped}</b><span class="meta">shipped</span></div><div><b>${p.stats.prsOpen}</b><span class="meta">PRs open</span></div><div><b>${p.stats.reviewsOwed}</b><span class="meta">reviews owed</span></div></div>
+      ${p.id!==me?`<form class="row" data-ask="${esc(p.id)}"><label class="sr" for="ask-${esc(p.id)}">Ask ${esc(p.name)}'s Claude</label><input id="ask-${esc(p.id)}" placeholder="Ask ${esc(p.name)}'s Claude…" style="flex:1"><button class="btn small" type="submit">Request</button></form>`:''}
+    </article>`;}).join('')}</div>`;
+}
+
+function renderRooms(){
+  const rooms = S.state.rooms;
+  return `<div class="rooms"><nav class="roomlist" aria-label="Rooms">${rooms.map(r=>`<button data-room="${esc(r.id)}" aria-current="${r.id===S.room}">#${esc(r.name)}</button>`).join('')}</nav>
+    <section class="msgs" aria-label="#${esc(S.room)}">
+      ${S.messages.map(m=>`<div class="msg ${esc(m.kind)}">${m.kind==='event'?`${esc(nameOf(m.author))} ${esc(m.text)} · ${ago(m.at)}`:`<span class="author">${esc(nameOf(m.author))}${m.kind==='agent'?"'s Claude":''}</span> <span class="meta">${ago(m.at)}</span><div>${esc(m.text)}</div>`}</div>`).join('') || '<p class="empty">No messages yet.</p>'}
+      <form id="say" class="row" style="margin-top:auto"><label class="sr" for="sayInput">Message #${esc(S.room)}</label><input id="sayInput" placeholder="Message #${esc(S.room)} · @name-claude asks their Claude" style="flex:1"><button class="btn primary" type="submit">Send</button></form>
+    </section></div>`;
+}
+
+function renderDecisions(){
+  return `<form id="decide" class="row" style="margin-bottom:16px"><label class="sr" for="dec">New decision</label><input id="dec" placeholder="Pin a decision for every agent" style="flex:1"><button class="btn primary" type="submit">Pin</button></form>
+    <div class="msgs" style="min-height:0">${S.state.decisions.map(d=>`<div class="row" style="justify-content:space-between"><div>${esc(d.text)} <span class="meta">#${esc(d.room)} · ${esc(nameOf(d.author))} · ${ago(d.at)}</span></div><button class="btn small" data-retire="${d.id}">Retire</button></div>`).join('') || '<p class="empty">No decisions pinned.</p>'}</div>`;
+}
+
+function render(){
+  const app = document.getElementById('app');
+  app.innerHTML = ({board:renderBoard, people:renderPeople, rooms:renderRooms, decisions:renderDecisions})[S.view]();
+}
+
+document.addEventListener('click', async (e) => {
+  const v = e.target.closest('[data-view]');
+  if (v) { S.view = v.dataset.view; document.querySelectorAll('nav [data-view]').forEach(b=>b.removeAttribute('aria-current')); v.setAttribute('aria-current','page'); return refresh(); }
+  const c = e.target.closest('[data-claim]');
+  if (c) { try { await api('POST', `/api/tasks/${c.dataset.claim}/claim`, { force: !!c.dataset.force }); } catch(err){ alertBox(err.message); } return refresh(); }
+  const r = e.target.closest('[data-room]');
+  if (r) { S.room = r.dataset.room; return refresh(); }
+  const d = e.target.closest('[data-retire]');
+  if (d) { await api('POST', `/api/decisions/${d.dataset.retire}/retire`); return refresh(); }
+});
+
+document.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  try {
+    if (f.id === 'whoForm') { ls.set('uid', document.getElementById('uid').value.trim().toLowerCase()); ls.set('uname', document.getElementById('uname').value.trim()); ls.set('utoken', document.getElementById('utoken').value); connect(); }
+    if (f.id === 'newTask') { const v = document.getElementById('nt').value; if (v.trim()) await api('POST','/api/tasks',{ title:v, source:'web' }); }
+    if (f.id === 'say') { const v = document.getElementById('sayInput').value; if (v.trim()) await api('POST',`/api/rooms/${encodeURIComponent(S.room)}/messages`,{ text:v }); }
+    if (f.id === 'decide') { const v = document.getElementById('dec').value; if (v.trim()) await api('POST','/api/decisions',{ text:v }); }
+    if (f.dataset.ask) { const v = f.querySelector('input').value; if (v.trim()) await api('POST','/api/requests',{ to:f.dataset.ask, text:v }); }
+  } catch (err) { alertBox(err.message); }
+  refresh();
+});
+
+function alertBox(msg){ const p = document.createElement('p'); p.className='empty'; p.setAttribute('role','alert'); p.textContent = msg; document.getElementById('app').prepend(p); }
+
+let es;
+function connect(){
+  document.getElementById('uid').value = ls.get('uid'); document.getElementById('uname').value = ls.get('uname'); document.getElementById('utoken').value = ls.get('utoken');
+  if (es) es.close();
+  if (ls.get('uid')) {
+    es = new EventSource('/api/stream?token=' + encodeURIComponent(ls.get('utoken')));
+    let t; const later = () => { clearTimeout(t); t = setTimeout(refresh, 150); };
+    ['task','person','message','decision','request','handoff'].forEach(ev => es.addEventListener(ev, later));
+  }
+  refresh();
+}
+connect();
+setInterval(refresh, 30000);
+</script>
+</body>
+</html>

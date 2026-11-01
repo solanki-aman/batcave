@@ -1,0 +1,8 @@
+{
+  "name": "batcave",
+  "version": "0.1.0",
+  "description": "Multiplayer Claude Code. A shared board with claims, people and presence, rooms, pinned decisions, requests between teammates' Claudes, handoffs, and an edit guard. Everyone runs their own Claude.",
+  "author": { "name": "Aman Solanki" },
+  "license": "MIT",
+  "keywords": ["collaboration", "team", "kanban", "multiplayer", "presence", "handoff"]
+}
