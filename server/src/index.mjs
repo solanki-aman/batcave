@@ -85,6 +85,7 @@ function touchPerson(id, name) {
 
 function presenceOf(p) {
   if (p.status === 'offline') return 'offline';
+  if (p.status === 'away') return 'away';
   const idle = now() - p.lastSeen;
   if (idle > 60 * 60 * 1000) return 'offline';
   if (idle > 10 * 60 * 1000) return 'away';

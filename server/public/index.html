@@ -78,6 +78,8 @@ main{padding:20px 24px}
 const S = { view: 'board', room: 'team', state: null, messages: [] };
 const ls = { get(k){ try { return localStorage.getItem(k) || ''; } catch { return S['_'+k] || ''; } }, set(k,v){ try { localStorage.setItem(k,v); } catch { S['_'+k]=v; } } };
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const AV = ['#141413','#E3DACC','#87867F','#CBCADB','#BCD1CA','#EBCECE','#D97757'];
+const avColor = (id) => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; const bg = AV[h % AV.length]; return `background:${bg};color:${bg==='#141413'?'#FAF9F5':'#141413'}`; };
 const initials = (n) => esc(String(n||'?').split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase());
 const ago = (t) => { const m = Math.round((Date.now()-t)/60000); return m<1?'now':m<60?m+'m':m<1440?Math.round(m/60)+'h':Math.round(m/1440)+'d'; };
 
@@ -103,7 +105,7 @@ const nameOf = (id) => S.state.people.find(p=>p.id===id)?.name || id;
 const LANES = [['backlog','Backlog'],['claimed','Claimed'],['running','Agent running'],['review','In review'],['done','Done']];
 
 function taskCard(t){
-  const owner = t.owner ? `<div class="row"><span class="av">${initials(nameOf(t.owner))}</span><span class="meta">${esc(nameOf(t.owner))}${t.stale?' · no activity '+ago(t.lastActivity):''}</span></div>` : '';
+  const owner = t.owner ? `<div class="row"><span class="av" style="${avColor(t.owner)}">${initials(nameOf(t.owner))}</span><span class="meta">${esc(nameOf(t.owner))}${t.stale?' · no activity '+ago(t.lastActivity):''}</span></div>` : '';
   const action = t.status==='backlog' ? `<button class="btn clay small" data-claim="${esc(t.id)}">Claim</button>`
     : t.stale && t.owner!==ls.get('uid') ? `<button class="btn small" data-claim="${esc(t.id)}" data-force="1">Take over</button>` : '';
   return `<article class="card${t.stale?' stale':''}">
@@ -135,7 +137,7 @@ function renderPeople(){
     const badge = p.presence==='agent running'?'<span class="badge run">Agent running</span>':p.presence==='online'?'<span class="badge on">Online</span>':`<span class="badge">${esc(p.presence)}</span>`;
     const task = S.state.tasks.find(t=>t.id===p.task);
     return `<article class="pcard">
-      <div class="row"><span class="av" style="width:44px;height:44px;font-size:14px">${initials(p.name)}</span>
+      <div class="row"><span class="av" style="width:44px;height:44px;font-size:14px;${avColor(p.id)}">${initials(p.name)}</span>
         <div style="flex:1"><div class="title">${esc(p.name)}${p.id===me?' <span class="meta">(you)</span>':''}</div><div class="meta">${esc(p.role||p.id)}</div></div>${badge}</div>
       <div class="now"><div class="meta">Now · ${ago(p.since||p.lastSeen)}</div><div>${esc(p.now||'idle')}</div>${task?`<div class="mono">${esc(task.id)} · ${esc(task.branch||task.title)}</div>`:''}</div>
       <div class="stats"><div><b>${p.stats.shipped}</b><span class="meta">shipped</span></div><div><b>${p.stats.prsOpen}</b><span class="meta">PRs open</span></div><div><b>${p.stats.reviewsOwed}</b><span class="meta">reviews owed</span></div></div>

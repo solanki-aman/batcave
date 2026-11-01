@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" width="1200" height="420" role="img" aria-label="Batcave: multiplayer Claude Code. Five teammates, each running their own Claude, connected to one shared hub.">
+  <style>
+    .serif{font-family:Georgia,'Times New Roman',serif}
+    .sans{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif}
+    .mono{font-family:'SF Mono',Menlo,Consolas,monospace}
+    .wire{stroke:#C2C0B6;stroke-width:1.5;fill:none}
+    .flow{stroke:#D97757;stroke-width:2.5;fill:none;stroke-linecap:round;stroke-dasharray:6 140;animation:flow 3.2s linear infinite}
+    .flow.b{animation-delay:-.7s}.flow.c{animation-delay:-1.4s}.flow.d{animation-delay:-2.1s}.flow.e{animation-delay:-2.7s}
+    @keyframes flow{to{stroke-dashoffset:-146}}
+    .ring{fill:none;stroke:#D97757;stroke-width:1.5;opacity:0;transform-origin:900px 210px;animation:ring 3.2s ease-out infinite}
+    .ring.two{animation-delay:1.6s}
+    @keyframes ring{0%{opacity:.6;transform:scale(.6)}100%{opacity:0;transform:scale(1.9)}}
+    .live{animation:live 1.6s ease-in-out infinite}
+    @keyframes live{50%{opacity:.25}}
+  </style>
+  <rect width="1200" height="420" rx="20" fill="#FAF9F5"/>
+  <rect x="0.5" y="0.5" width="1199" height="419" rx="20" fill="none" stroke="#E8E6DC"/>
+
+  <text x="64" y="150" class="serif" font-size="84" fill="#141413">Batcave</text>
+  <text x="66" y="200" class="sans" font-size="26" fill="#3D3D3A">Multiplayer Claude Code.</text>
+  <text x="66" y="240" class="sans" font-size="18" fill="#5E5D59">One board. Live presence. Shared decisions.</text>
+  <text x="66" y="266" class="sans" font-size="18" fill="#5E5D59">Everyone runs their own Claude.</text>
+
+  <g transform="translate(66 304)">
+    <rect width="456" height="44" rx="10" fill="#141413"/>
+    <circle cx="22" cy="22" r="5" fill="#9DB97A" class="live"/>
+    <text x="38" y="28" class="mono" font-size="14" fill="#F0EEE6">acme-web · 4 online · 1 request · T-9 running</text>
+  </g>
+
+  <!-- wires from teammates to hub -->
+  <path class="wire" d="M700 80 C 780 90, 840 150, 900 210"/>
+  <path class="wire" d="M1100 80 C 1020 90, 960 150, 900 210"/>
+  <path class="wire" d="M640 230 C 740 230, 820 215, 900 210"/>
+  <path class="wire" d="M1120 250 C 1040 240, 980 220, 900 210"/>
+  <path class="wire" d="M900 370 C 900 310, 900 260, 900 210"/>
+  <path class="flow"   d="M700 80 C 780 90, 840 150, 900 210"/>
+  <path class="flow b" d="M1100 80 C 1020 90, 960 150, 900 210"/>
+  <path class="flow c" d="M640 230 C 740 230, 820 215, 900 210"/>
+  <path class="flow d" d="M1120 250 C 1040 240, 980 220, 900 210"/>
+  <path class="flow e" d="M900 370 C 900 310, 900 260, 900 210"/>
+
+  <!-- hub -->
+  <circle class="ring" cx="900" cy="210" r="46"/>
+  <circle class="ring two" cx="900" cy="210" r="46"/>
+  <circle cx="900" cy="210" r="46" fill="#141413"/>
+  <g fill="#FAF9F5"><circle cx="900" cy="196" r="6"/><circle cx="886" cy="220" r="6"/><circle cx="914" cy="220" r="6"/></g><g stroke="#FAF9F5" stroke-width="2"><path d="M900 196 L886 220 L914 220 Z" fill="none"/></g>
+
+  <!-- teammates -->
+  <g class="sans" font-size="13">
+    <g transform="translate(700 80)">
+      <circle r="24" fill="#E3DACC"/><text text-anchor="middle" y="5" font-weight="700" fill="#141413">PR</text>
+      <rect x="-56" y="32" width="112" height="24" rx="12" fill="#FFFFFF" stroke="#E8E6DC"/><text x="0" y="48" text-anchor="middle" fill="#3D3D3A">editing plan</text>
+    </g>
+    <g transform="translate(1100 80)">
+      <circle r="24" fill="#87867F"/><text text-anchor="middle" y="5" font-weight="700" fill="#141413">NK</text>
+      <rect x="-60" y="32" width="120" height="24" rx="12" fill="#FFFFFF" stroke="#D97757"/><text x="0" y="48" text-anchor="middle" fill="#3D3D3A">agent running</text>
+    </g>
+    <g transform="translate(640 230)">
+      <circle r="24" fill="#141413"/><text text-anchor="middle" y="5" font-weight="700" fill="#FAF9F5">AS</text>
+      <rect x="-48" y="32" width="96" height="24" rx="12" fill="#FFFFFF" stroke="#D97757"/><text x="0" y="48" text-anchor="middle" fill="#3D3D3A">T-9 claim</text>
+    </g>
+    <g transform="translate(1120 250)">
+      <circle r="24" fill="#CBCADB"/><text text-anchor="middle" y="5" font-weight="700" fill="#141413">LW</text>
+      <rect x="-48" y="32" width="96" height="24" rx="12" fill="#FFFFFF" stroke="#E8E6DC"/><text x="0" y="48" text-anchor="middle" fill="#3D3D3A">PR open</text>
+    </g>
+    <g transform="translate(900 370)">
+      <circle r="24" fill="#BCD1CA"/><text text-anchor="middle" y="5" font-weight="700" fill="#141413">MB</text>
+      <rect x="32" y="-12" width="96" height="24" rx="12" fill="#FFFFFF" stroke="#E8E6DC"/><text x="80" y="4" text-anchor="middle" fill="#3D3D3A">reviewing</text>
+    </g>
+  </g>
+</svg>

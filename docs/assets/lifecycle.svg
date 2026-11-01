@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 260" width="1200" height="260" role="img" aria-label="Task lifecycle: backlog, claimed on claim, agent running on first edit, in review when a PR opens, done on merge. Cards move automatically.">
+  <style>
+    .sans{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif}
+    .mono{font-family:'SF Mono',Menlo,Consolas,monospace}
+    .card{animation:move 10s ease-in-out infinite}
+    @keyframes move{
+      0%,12%{transform:translate(64px,128px)}
+      20%,32%{transform:translate(290px,128px)}
+      40%,52%{transform:translate(516px,128px)}
+      60%,72%{transform:translate(742px,128px)}
+      80%,100%{transform:translate(968px,128px)}
+    }
+    .agent{animation:agent 10s step-end infinite}
+    @keyframes agent{0%{opacity:0}40%{opacity:1}60%{opacity:0}}
+  </style>
+  <rect width="1200" height="260" rx="20" fill="#FAF9F5"/>
+  <g class="sans">
+    <g font-size="15" font-weight="600" fill="#141413">
+      <rect x="48" y="40" width="200" height="190" rx="14" fill="#F0EEE6"/><text x="64" y="70">Backlog</text>
+      <rect x="274" y="40" width="200" height="190" rx="14" fill="#F0EEE6"/><text x="290" y="70">Claimed</text>
+      <rect x="500" y="40" width="200" height="190" rx="14" fill="#F0EEE6"/><text x="516" y="70">Agent running</text>
+      <rect x="726" y="40" width="200" height="190" rx="14" fill="#F0EEE6"/><text x="742" y="70">In review</text>
+      <rect x="952" y="40" width="200" height="190" rx="14" fill="#F0EEE6"/><text x="968" y="70">Done</text>
+    </g>
+    <g font-size="12" fill="#5E5D59" class="mono">
+      <text x="64" y="96">/batcave:task</text>
+      <text x="290" y="96">/batcave:claim</text>
+      <text x="516" y="96">first edit (hook)</text>
+      <text x="742" y="96">gh pr create (hook)</text>
+      <text x="968" y="96">merge</text>
+    </g>
+    <g fill="#C2C0B6">
+      <path d="M264 135 l-10 -6 v12 z"/><path d="M490 135 l-10 -6 v12 z"/><path d="M716 135 l-10 -6 v12 z"/><path d="M942 135 l-10 -6 v12 z"/>
+    </g>
+    <g class="card">
+      <rect width="168" height="78" rx="10" fill="#FFFFFF" stroke="#DEDCD1"/>
+      <text x="12" y="22" font-size="11" fill="#5E5D59">T-9 · plan step 4</text>
+      <text x="12" y="44" font-size="14" font-weight="600" fill="#141413">Dark mode receipts</text>
+      <circle cx="22" cy="62" r="9" fill="#141413"/><text x="22" y="66" text-anchor="middle" font-size="8" font-weight="700" fill="#FAF9F5">AS</text>
+      <g class="agent"><rect x="38" y="53" width="96" height="18" rx="9" fill="#F5F4ED" stroke="#D97757"/><text x="86" y="66" text-anchor="middle" font-size="10" fill="#141413">agent running</text></g>
+    </g>
+  </g>
+</svg>
