@@ -1,13 +1,13 @@
-// Client for the optional local decision model (Julia-1 sidecar, see brain/).
+// Client for the optional local decision model (Julia-1 sidecar, see scout/).
 // Every call has a hard timeout and returns null on any failure, so the server
 // falls back to plain rules and never waits on the model.
 
-export class Brain {
-  constructor(stats, url = process.env.BATCAVE_BRAIN_URL || 'http://127.0.0.1:4778', timeoutMs = Number(process.env.BATCAVE_BRAIN_TIMEOUT_MS || 900)) {
+export class Scout {
+  constructor(stats, url = process.env.BATCAVE_SCOUT_URL || 'http://127.0.0.1:4778', timeoutMs = Number(process.env.BATCAVE_SCOUT_TIMEOUT_MS || 900)) {
     this.stats = stats;
     this.url = url.replace(/\/+$/, '');
     this.timeoutMs = timeoutMs;
-    this.disabled = process.env.BATCAVE_BRAIN === 'off';
+    this.disabled = process.env.BATCAVE_SCOUT === 'off';
     this.health = { ok: false, checkedAt: 0 };
     if (!this.disabled) { this.check(); setInterval(() => this.check(), 30000).unref(); }
   }
@@ -35,14 +35,14 @@ export class Brain {
         body: JSON.stringify({ state: String(state).slice(0, 4000), questions }),
         signal: AbortSignal.timeout(this.timeoutMs),
       });
-      if (!r.ok) throw new Error(`brain ${r.status}`);
+      if (!r.ok) throw new Error(`scout ${r.status}`);
       const j = await r.json();
-      this.stats.time(`brain:${label}`, performance.now() - t0);
-      this.stats.count(`brain_${label}`);
+      this.stats.time(`scout:${label}`, performance.now() - t0);
+      this.stats.count(`scout_${label}`);
       return j.answers || null;
     } catch {
-      this.stats.time(`brain:${label}:failed`, performance.now() - t0);
-      this.stats.count('brain_failures');
+      this.stats.time(`scout:${label}:failed`, performance.now() - t0);
+      this.stats.count('scout_failures');
       return null;
     }
   }

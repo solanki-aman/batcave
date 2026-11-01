@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { Store } from './store.mjs';
 import { Stats, estTokens } from './stats.mjs';
-import { Brain, yesProb, topChoice } from './brain.mjs';
+import { Scout, yesProb, topChoice } from './scout.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const VERSION = '0.3.0';
@@ -24,7 +24,7 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const store = new Store(DATA_FILE);
 const db = store.data;
 const stats = new Stats(store);
-const brain = new Brain(stats);
+const scout = new Scout(stats);
 
 // ---------- helpers ----------
 
@@ -190,14 +190,14 @@ async function renderContext(me, { session = '', prompt = '', force = false } = 
   const baseline = contextLines(me, p, t, allDecisions.slice(-15), allMsgs.slice(-8));
 
   let decisions = allDecisions.slice(-15), msgs = allMsgs.slice(-8), ranked = false;
-  if (brain.ready && (allDecisions.length > 5 || allMsgs.length > 3)) {
+  if (scout.ready && (allDecisions.length > 5 || allMsgs.length > 3)) {
     const cands = [
       ...allDecisions.map((d) => ({ kind: 'd', item: d, text: d.text })),
       ...allMsgs.map((m) => ({ kind: 'm', item: m, text: `${person(m.author)?.name || m.author}: ${m.text}` })),
     ].slice(-24);
     const state = [`Developer: ${p?.name || me}`, t ? `Task ${t.id}: ${t.title}` : 'No active task', prompt ? `Current request: ${String(prompt).slice(0, 600)}` : ''].filter(Boolean).join('\n');
     const questions = Object.fromEntries(cands.map((c, i) => [`c${i}`, { type: 'noul', instructions: `Is this team note relevant to the developer's current task or request? Note: ${c.text.slice(0, 300)}` }]));
-    const answers = await brain.decide(state, questions, 'rank');
+    const answers = await scout.decide(state, questions, 'rank');
     if (answers) {
       const scored = cands.map((c, i) => ({ ...c, p: yesProb(answers[`c${i}`]) ?? 1 }));
       const ds = scored.filter((c) => c.kind === 'd');
@@ -226,8 +226,8 @@ async function renderContext(me, { session = '', prompt = '', force = false } = 
 
 // Classify a human room message; suggest pinning it when it reads like a team decision.
 async function classifyMessage(msg) {
-  if (!brain.ready || msg.kind !== 'human' || msg.text.length < 12) return;
-  const answers = await brain.decide(msg.text, {
+  if (!scout.ready || msg.kind !== 'human' || msg.text.length < 12) return;
+  const answers = await scout.decide(msg.text, {
     kind: {
       type: 'choice',
       instructions: 'What kind of team chat message is this?',
@@ -267,7 +267,7 @@ route('GET', '/api/state', () => ({
   decisions: db.decisions.filter((d) => d.active),
   requests: db.requests.filter((r) => r.status === 'pending'),
   handoffs: db.handoffs.filter((h) => h.status === 'open'),
-  savings: { tokens: stats.summary().tokens.saved, brain: brain.ready },
+  savings: { tokens: stats.summary().tokens.saved, scout: scout.ready },
 }));
 
 // presence
@@ -522,7 +522,7 @@ route('GET', '/api/context', ({ me, query }) => renderContext(me, { session: que
 // stats: latency and savings for the team
 route('GET', '/api/stats', () => ({
   ...stats.summary(),
-  brain: { enabled: !brain.disabled, ready: brain.ready, url: brain.url, ...brain.health },
+  scout: { enabled: !scout.disabled, ready: scout.ready, url: scout.url, ...scout.health },
   team: { people: Object.keys(db.people).length, tasks: Object.keys(db.tasks).length, decisions: db.decisions.filter((d) => d.active).length },
 }));
 

@@ -9,7 +9,7 @@
   "files": [
     "cli",
     "plugin",
-    "brain",
+    "scout",
     "server/src",
     "server/public",
     "server/package.json"
