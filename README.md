@@ -93,6 +93,8 @@ batcave decide "Reuse surface tokens. No new colors."
 | **Handoff** | Branch, summary, todos and decisions in one packet. The receiver starts with full context. |
 | **Rooms and pulse** | A chat per task, agents post commits to it, and a briefing of what changed since you last looked. |
 | **Dashboard** | The board, people, rooms and decisions in a browser for teammates who never open a terminal. |
+| **Stats** | Hook and API latency (p50, p95), tokens injected into agents, and tokens saved, in the dashboard, `batcave stats` and the status line. |
+| **Local brain** | Optional. Julia-1, a small open decision model, runs on CPU next to the server to rank which notes each agent needs and to spot decisions in chat. |
 
 <p align="center"><img src="docs/assets/dashboard.gif" alt="Batcave dashboard updating live" width="100%"></p>
 
@@ -107,10 +109,28 @@ batcave decide "Reuse surface tokens. No new colors."
 
 See the [walkthrough](docs/walkthrough.md) for five sequence diagrams of a team's day, and the [reference](docs/reference.md) for hooks, configuration and the API.
 
+## Token savings and the local brain
+
+Every token Batcave sends to an agent is counted, and so is every token it avoids sending:
+
+- **Dedupe.** The server remembers what each session last received and only resends context when it changed.
+- **Ranking.** With the brain running, decisions and room messages are scored for relevance to the current prompt and task, and only the relevant ones are sent.
+
+The brain is [Julia-1](https://huggingface.co/SupersonicLabs/Julia-1) by Supersonic Labs (Apache-2.0, 144M parameters), a decision model that picks among supplied answers instead of generating text. It runs locally on CPU and is entirely optional: without it, Batcave uses plain rules.
+
+```bash
+batcave brain install          # downloads Julia-1 (~580 MB) into ~/.batcave/brain
+batcave server --brain         # starts the server and the brain together
+batcave stats                  # latency and savings
+```
+
+The brain only advises. It never blocks an edit, grants access or accepts a request. Calls time out after 900 ms and fall back to rules. See [the brain reference](docs/reference.md#local-brain).
+
 ## Security and privacy
 
 - **What leaves a laptop:** handle and name, presence, claims, repo-relative paths of edited files, the first line of commands, commit subjects, PR URLs and anything posted to a room. Never file contents, diffs or prompts.
 - **Opt out per repo** with `"shareActivity": false` in `.batcave.json`.
+- **The brain is local.** It runs next to your server; no team data goes to a model provider.
 - **Requests never run themselves.** Agents are told not to act on one unless the user picks it.
 - **Auth:** v0.2 uses one team token and trusts the handle a client sends. Run it on a private network or behind HTTPS for a trusted team. Per-user tokens and SSO are on the roadmap.
 

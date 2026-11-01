@@ -4,10 +4,13 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import crypto from 'node:crypto';
 import { Store } from './store.mjs';
+import { Stats, estTokens } from './stats.mjs';
+import { Brain, yesProb, topChoice } from './brain.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const VERSION = '0.2.0';
+const VERSION = '0.3.0';
 
 const PORT = Number(process.env.PORT || 4777);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -20,6 +23,8 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
 const store = new Store(DATA_FILE);
 const db = store.data;
+const stats = new Stats(store);
+const brain = new Brain(stats);
 
 // ---------- helpers ----------
 
@@ -150,38 +155,97 @@ function setTask(t, patch, by, quiet = false) {
   }
 }
 
-function renderContext(me) {
-  const p = person(me);
-  const t = activeTaskOf(me);
+const sessionHashes = new Map(); // `${user}:${session}` -> hash of the last context sent
+
+function contextLines(me, p, t, decisions, msgs) {
   const lines = [];
   lines.push(`[Batcave · team ${TEAM}] You are working with ${p ? p.name : me}.`);
   if (t) lines.push(`Active task ${t.id}: "${t.title}" on branch ${t.branch || '(none)'}, room #${t.room}.`);
   else lines.push('No active task claimed. If the user starts new work, suggest checking the board and claiming a task (batcave_board, batcave_claim).');
-
-  const decisions = db.decisions.filter((d) => d.active && (d.room === 'team' || (t && d.room === t.room)));
   if (decisions.length) {
     lines.push('Team decisions (follow these unless the user overrides them):');
-    for (const d of decisions.slice(-15)) lines.push(`- ${d.text} (${person(d.author)?.name || d.author})`);
+    for (const d of decisions) lines.push(`- ${d.text} (${person(d.author)?.name || d.author})`);
   }
-
-  if (t) {
-    const msgs = db.messages.filter((m) => m.room === t.room && m.kind !== 'event').slice(-8);
-    if (msgs.length) {
-      lines.push(`Recent messages in #${t.room}:`);
-      for (const m of msgs) lines.push(`- ${person(m.author)?.name || m.author}: ${m.text}`);
-    }
+  if (t && msgs.length) {
+    lines.push(`Recent messages in #${t.room}:`);
+    for (const m of msgs) lines.push(`- ${person(m.author)?.name || m.author}: ${m.text}`);
   }
-
   const reqs = db.requests.filter((r) => r.to === me && r.status === 'pending');
   if (reqs.length) {
     lines.push(`${reqs.length} pending request(s) for this user's agent. Do NOT act on them unless the user explicitly picks one (requests command or batcave_requests tool):`);
     for (const r of reqs.slice(0, 5)) lines.push(`- R-${r.id} from ${person(r.from)?.name || r.from}: ${r.text}`);
   }
-
   const hand = db.handoffs.filter((h) => h.to === me && h.status === 'open');
   for (const h of hand) lines.push(`Handoff H-${h.id} waiting from ${person(h.from)?.name || h.from} for ${h.task}. The user can pick it up (batcave_pickup ${h.id}).`);
+  return { text: lines.join('\n'), reqs, hand };
+}
 
-  return { task: t ? publicTask(t) : null, decisions, requests: reqs, handoffs: hand, text: lines.join('\n') };
+// Build the context bundle. With the local decision model available, keep only the
+// decisions and messages that are relevant to the current task and request.
+async function renderContext(me, { session = '', prompt = '', force = false } = {}) {
+  const p = person(me);
+  const t = activeTaskOf(me);
+  const allDecisions = db.decisions.filter((d) => d.active && (d.room === 'team' || (t && d.room === t.room))).slice(-30);
+  const allMsgs = t ? db.messages.filter((m) => m.room === t.room && m.kind !== 'event').slice(-20) : [];
+  const baseline = contextLines(me, p, t, allDecisions.slice(-15), allMsgs.slice(-8));
+
+  let decisions = allDecisions.slice(-15), msgs = allMsgs.slice(-8), ranked = false;
+  if (brain.ready && (allDecisions.length > 5 || allMsgs.length > 3)) {
+    const cands = [
+      ...allDecisions.map((d) => ({ kind: 'd', item: d, text: d.text })),
+      ...allMsgs.map((m) => ({ kind: 'm', item: m, text: `${person(m.author)?.name || m.author}: ${m.text}` })),
+    ].slice(-24);
+    const state = [`Developer: ${p?.name || me}`, t ? `Task ${t.id}: ${t.title}` : 'No active task', prompt ? `Current request: ${String(prompt).slice(0, 600)}` : ''].filter(Boolean).join('\n');
+    const questions = Object.fromEntries(cands.map((c, i) => [`c${i}`, { type: 'noul', instructions: `Is this team note relevant to the developer's current task or request? Note: ${c.text.slice(0, 300)}` }]));
+    const answers = await brain.decide(state, questions, 'rank');
+    if (answers) {
+      const scored = cands.map((c, i) => ({ ...c, p: yesProb(answers[`c${i}`]) ?? 1 }));
+      const ds = scored.filter((c) => c.kind === 'd');
+      decisions = (ds.length <= 5 ? ds : ds.filter((c) => c.p >= 0.35).sort((a, b) => b.p - a.p).slice(0, 8)).map((c) => c.item);
+      if (!decisions.length && ds.length) decisions = ds.sort((a, b) => b.p - a.p).slice(0, 3).map((c) => c.item);
+      msgs = scored.filter((c) => c.kind === 'm' && c.p >= 0.5).sort((a, b) => b.p - a.p).slice(0, 6).map((c) => c.item).sort((a, b) => a.at - b.at);
+      ranked = true;
+    }
+  }
+
+  const { text, reqs, hand } = contextLines(me, p, t, decisions, msgs);
+  if (ranked) stats.tokens('savedRanking', Math.max(0, estTokens(baseline.text) - estTokens(text)));
+
+  let changed = true;
+  if (session) {
+    const key = `${me}:${session}`;
+    const hash = crypto.createHash('sha1').update(text).digest('hex');
+    changed = force || sessionHashes.get(key) !== hash;
+    sessionHashes.set(key, hash);
+    if (sessionHashes.size > 5000) sessionHashes.delete(sessionHashes.keys().next().value);
+  }
+  if (changed) stats.tokens('injected', estTokens(text)); else stats.tokens('savedDedupe', estTokens(text));
+  stats.count('context_served');
+  return { task: t ? publicTask(t) : null, decisions, requests: reqs, handoffs: hand, text, changed, ranked, tokens: estTokens(text), baselineTokens: estTokens(baseline.text) };
+}
+
+// Classify a human room message; suggest pinning it when it reads like a team decision.
+async function classifyMessage(msg) {
+  if (!brain.ready || msg.kind !== 'human' || msg.text.length < 12) return;
+  const answers = await brain.decide(msg.text, {
+    kind: {
+      type: 'choice',
+      instructions: 'What kind of team chat message is this?',
+      criteria: {
+        decision: 'A decision or rule the team agreed to follow',
+        question: 'A question for someone',
+        blocker: 'Something is blocked or broken',
+        update: 'A status update on work',
+        chatter: 'Social or other chatter',
+      },
+    },
+  }, 'classify');
+  const top = topChoice(answers?.kind);
+  if (!top) return;
+  msg.meta = { ...(msg.meta || {}), kind: top.choice, confidence: top.p };
+  stats.count(`messages_${top.choice}`);
+  if (top.choice === 'decision' && (Number.isNaN(top.p) || top.p >= 0.6)) msg.meta.suggestPin = true;
+  broadcast('message', msg);
 }
 
 // ---------- routes ----------
@@ -190,7 +254,7 @@ const routes = [];
 const route = (method, pattern, handler, opts = {}) => {
   const keys = [];
   const re = new RegExp('^' + pattern.replace(/:(\w+)/g, (_, k) => { keys.push(k); return '([^/]+)'; }) + '$');
-  routes.push({ method, re, keys, handler, opts });
+  routes.push({ method, pattern, re, keys, handler, opts });
 };
 
 route('GET', '/api/health', () => ({ ok: true, team: TEAM, version: VERSION, auth: Boolean(TOKEN) }), { public: true });
@@ -203,6 +267,7 @@ route('GET', '/api/state', () => ({
   decisions: db.decisions.filter((d) => d.active),
   requests: db.requests.filter((r) => r.status === 'pending'),
   handoffs: db.handoffs.filter((h) => h.status === 'open'),
+  savings: { tokens: stats.summary().tokens.saved, brain: brain.ready },
 }));
 
 // presence
@@ -253,7 +318,7 @@ route('POST', '/api/tasks', ({ me, body }) => {
 
 route('GET', '/api/tasks/:id', ({ params }) => publicTask(getTask(params.id)));
 
-route('POST', '/api/tasks/:id/claim', ({ me, params, body }) => {
+route('POST', '/api/tasks/:id/claim', async ({ me, params, body }) => {
   const t = getTask(params.id);
   if (t.owner && t.owner !== me && !isStale(t) && !body.force) {
     throw new HttpError(409, `${t.id} is claimed by ${person(t.owner)?.name || t.owner}. Ask them for a handoff, or wait until it goes stale.`);
@@ -265,7 +330,8 @@ route('POST', '/api/tasks/:id/claim', ({ me, params, body }) => {
   post(t.room, me, prev && prev !== me ? `took over ${t.id} from ${person(prev)?.name || prev}` : `claimed ${t.id}`, 'event', { task: t.id });
   const p = person(me); p.task = t.id; p.branch = branch;
   broadcast('person', publicPerson(p));
-  return { task: publicTask(t), otherActive: others.map(publicTask), context: renderContext(me) };
+  stats.count('claims');
+  return { task: publicTask(t), otherActive: others.map(publicTask), context: await renderContext(me) };
 });
 
 route('POST', '/api/tasks/:id/release', ({ me, params }) => {
@@ -302,6 +368,8 @@ route('POST', '/api/rooms/:id/messages', ({ me, params, body }) => {
     const to = cleanId(m[1]);
     if (db.people[to] && to !== me) createRequest(me, to, text, params.id);
   }
+  stats.count('messages');
+  classifyMessage(msg).catch(() => {});
   return msg;
 });
 
@@ -311,6 +379,7 @@ route('GET', '/api/decisions', ({ query }) => db.decisions.filter((d) => d.activ
 route('POST', '/api/decisions', ({ me, body }) => {
   const d = { id: store.nextId('dec'), text: str(body.text, 'text', 500), room: cleanId(body.room) || 'team', author: me, at: now(), active: true };
   db.decisions.push(d);
+  stats.count('decisions');
   broadcast('decision', d);
   post(d.room, me, `decided: ${d.text}`, 'event', { decision: d.id });
   return d;
@@ -329,6 +398,7 @@ route('POST', '/api/decisions/:id/retire', ({ me, params }) => {
 function createRequest(from, to, text, room) {
   const r = { id: store.nextId('req'), from, to, text, room: room || activeTaskOf(to)?.room || 'team', status: 'pending', at: now() };
   db.requests.push(r);
+  stats.count('requests');
   broadcast('request', r);
   return r;
 }
@@ -372,6 +442,7 @@ route('POST', '/api/handoffs', ({ me, body }) => {
     branch: t.branch,
   };
   db.handoffs.push(h);
+  stats.count('handoffs');
   setTask(t, { owner: to, status: 'claimed', lastActivity: now() }, me, true);
   post(t.room, me, `handed ${t.id} to ${person(to).name}`, 'event', { handoff: h.id });
   broadcast('handoff', h);
@@ -440,11 +511,20 @@ route('GET', '/api/guard', ({ me, query }) => {
       return acc;
     }, {});
   const list = Object.values(hits);
+  stats.count('guard_checks');
+  if (list.length) stats.count('guard_conflicts');
   return { conflict: list.length > 0, touches: list };
 });
 
 // context bundle injected into every prompt
-route('GET', '/api/context', ({ me }) => renderContext(me));
+route('GET', '/api/context', ({ me, query }) => renderContext(me, { session: query.session, prompt: query.prompt, force: query.force === '1' }));
+
+// stats: latency and savings for the team
+route('GET', '/api/stats', () => ({
+  ...stats.summary(),
+  brain: { enabled: !brain.disabled, ready: brain.ready, url: brain.url, ...brain.health },
+  team: { people: Object.keys(db.people).length, tasks: Object.keys(db.tasks).length, decisions: db.decisions.filter((d) => d.active).length },
+}));
 
 // pulse: what changed since a timestamp
 route('GET', '/api/pulse', ({ query }) => {
@@ -529,7 +609,12 @@ const server = http.createServer(async (req, res) => {
 
     const body = req.method === 'GET' ? {} : await readBody(req);
     const query = Object.fromEntries(url.searchParams);
+    const t0 = performance.now();
     const result = await match.handler({ me, params, body, query, req });
+    stats.time(`api:${match.method} ${match.pattern}`, performance.now() - t0);
+    // clients report how long their previous hook took, end to end
+    const hook = String(req.headers['x-batcave-hook'] || '').match(/^([a-z]+):([a-z-]+):(\d+(?:\.\d+)?)$/);
+    if (hook) { stats.time(`hook:${hook[2]}`, Number(hook[3])); stats.time(`agent:${hook[1]}`, Number(hook[3])); }
     store.save();
     send(res, 200, result);
   } catch (err) {

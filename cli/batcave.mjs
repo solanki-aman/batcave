@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { INSTALLERS, writeAgentsMd } from './installers.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -54,6 +54,94 @@ async function run(name, args) {
   try { out(await t.run(args)); } catch (e) { die(e.message); }
 }
 
+
+// ---------- brain (local Julia-1 decision model) ----------
+const BRAIN_DIR = path.join(HOME_DIR, 'brain');
+const BRAIN_VENV = path.join(BRAIN_DIR, 'venv');
+const BRAIN_MODEL = path.join(BRAIN_DIR, 'Julia-1');
+const venvPy = () => path.join(BRAIN_VENV, process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
+
+function sh(cmd, args, opts = {}) {
+  out(`  $ ${[cmd, ...args].join(' ')}`);
+  const r = spawnSync(cmd, args, { stdio: 'inherit', ...opts });
+  if (r.status !== 0) die(`Command failed: ${cmd} ${args.join(' ')}`);
+}
+
+function findPython() {
+  for (const c of ['python3', 'python']) {
+    const r = spawnSync(c, ['-c', 'import sys;print(sys.version_info[:2] >= (3,9))'], { encoding: 'utf8' });
+    if (r.status === 0 && r.stdout.trim() === 'True') return c;
+  }
+  die('Python 3.9+ is required for the brain. Install it and re-run.');
+}
+
+function brainInstall() {
+  const py = findPython();
+  fs.mkdirSync(BRAIN_DIR, { recursive: true });
+  out('Setting up the Batcave brain (Julia-1, Apache-2.0, ~580 MB) in ' + BRAIN_DIR);
+  if (!fs.existsSync(venvPy())) sh(py, ['-m', 'venv', BRAIN_VENV]);
+  sh(venvPy(), ['-m', 'pip', 'install', '--quiet', '--upgrade', 'pip', 'huggingface_hub']);
+  if (process.platform === 'linux' && !flags['keep-torch']) {
+    sh(venvPy(), ['-m', 'pip', 'install', '--quiet', 'torch', '--index-url', 'https://download.pytorch.org/whl/cpu']);
+  }
+  sh(venvPy(), ['-c', `from huggingface_hub import snapshot_download; snapshot_download('${flags.repo || 'SupersonicLabs/Julia-1'}', local_dir=${JSON.stringify(BRAIN_MODEL)})`]);
+  if (fs.existsSync(path.join(BRAIN_MODEL, 'pyproject.toml')) || fs.existsSync(path.join(BRAIN_MODEL, 'setup.py'))) {
+    sh(venvPy(), ['-m', 'pip', 'install', '--quiet', '-e', BRAIN_MODEL]);
+  } else if (fs.existsSync(path.join(BRAIN_MODEL, 'requirements.txt'))) {
+    sh(venvPy(), ['-m', 'pip', 'install', '--quiet', '-r', path.join(BRAIN_MODEL, 'requirements.txt')]);
+  }
+  fs.copyFileSync(path.join(ROOT, 'brain', 'batcave_brain.py'), path.join(BRAIN_DIR, 'batcave_brain.py'));
+  out('\n✓ Brain installed. Start it next to your Batcave server with: batcave brain start');
+}
+
+function brainArgs() {
+  return [path.join(BRAIN_DIR, 'batcave_brain.py'), '--model', BRAIN_MODEL, '--port', String(flags['brain-port'] || flags.port || 4778), '--device', String(flags.device || 'cpu')];
+}
+
+function brainStart(detach) {
+  if (!fs.existsSync(venvPy()) || !fs.existsSync(BRAIN_MODEL)) die('Brain not installed. Run: batcave brain install');
+  fs.copyFileSync(path.join(ROOT, 'brain', 'batcave_brain.py'), path.join(BRAIN_DIR, 'batcave_brain.py'));
+  if (!detach) return spawnSync(venvPy(), brainArgs(), { stdio: 'inherit' });
+  const log = fs.openSync(path.join(BRAIN_DIR, 'brain.log'), 'a');
+  const child = spawn(venvPy(), brainArgs(), { detached: true, stdio: ['ignore', log, log] });
+  fs.writeFileSync(path.join(BRAIN_DIR, 'brain.pid'), String(child.pid));
+  child.unref();
+  out(`✓ Brain starting in the background (pid ${child.pid}). Log: ${path.join(BRAIN_DIR, 'brain.log')}`);
+  return child;
+}
+
+async function brainStatus() {
+  const url = (process.env.BATCAVE_BRAIN_URL || `http://127.0.0.1:${flags.port || 4778}`).replace(/\/+$/, '');
+  try {
+    const h = await fetch(url + '/health', { signal: AbortSignal.timeout(2000) }).then((r) => r.json());
+    const s = await fetch(url + '/stats', { signal: AbortSignal.timeout(2000) }).then((r) => r.json()).catch(() => ({}));
+    out(`${h.loaded ? '✓' : '…'} Brain at ${url}: ${h.loaded ? 'ready' : h.error ? 'error' : 'loading'} · model ${h.model} on ${h.device}${h.load_ms ? ` · loaded in ${h.load_ms} ms` : ''}`);
+    if (h.error) out(`  ${h.error}`);
+    if (s.calls) out(`  ${s.calls} decisions · p50 ${s.p50_ms} ms · p95 ${s.p95_ms} ms`);
+  } catch { out(`○ No brain running at ${url}. Start it with: batcave brain start`); }
+}
+
+async function printStats() {
+  const { loadConfig, api } = await import(pathToFileURL(path.join(PLUGIN, 'lib', 'client.mjs')).href);
+  let s;
+  try { s = await api(loadConfig(), 'GET', '/api/stats', undefined, 5000); } catch (e) { die(e.message); }
+  const t = s.tokens, n = (x) => Number(x || 0).toLocaleString('en-US');
+  out(`Batcave stats since ${new Date(s.since).toISOString().slice(0, 16).replace('T', ' ')} UTC\n`);
+  out('Tokens');
+  out(`  injected into agents      ${n(t.injected)}`);
+  out(`  saved by dedupe           ${n(t.savedDedupe)}`);
+  out(`  saved by ranking (brain)  ${n(t.savedRanking)}`);
+  out(`  saved overall             ${n(t.saved)}  (${t.savedPct}%)`);
+  out(`\nBrain  ${s.brain.ready ? `ready · ${s.brain.model} on ${s.brain.device}` : s.brain.enabled ? 'not running (plain rules in use)' : 'off'}`);
+  const rows = Object.entries(s.latency).filter(([k]) => /^(hook|brain|api:GET \/api\/(context|guard)|agent)/.test(k)).sort();
+  if (rows.length) {
+    out('\nLatency (ms)                         count     p50     p95');
+    for (const [k, v] of rows) out(`  ${k.padEnd(34)} ${String(v.count).padStart(6)} ${String(v.p50 ?? '-').padStart(7)} ${String(v.p95 ?? '-').padStart(7)}`);
+  }
+  const c = s.counters;
+  out(`\nActivity  claims ${c.claims || 0} · guard checks ${c.guard_checks || 0} (${c.guard_conflicts || 0} conflicts) · requests ${c.requests || 0} · handoffs ${c.handoffs || 0} · decisions ${c.decisions || 0}`);
+}
+
 const HELP = `batcave: multiplayer coding agents
 
 Setup
@@ -65,7 +153,15 @@ Setup
   batcave uninstall [--agent ...]    Remove Batcave from agents (backups are kept)
   batcave agents                     Show supported agents and which are installed here
   batcave doctor                     Check config and server
-  batcave server [--port 4777]       Run a Batcave server (needs BATCAVE_TEAM_TOKEN)
+  batcave server [--port 4777] [--brain]
+                                     Run a Batcave server (needs BATCAVE_TEAM_TOKEN);
+                                     --brain also starts the local decision model
+  batcave stats                      Team latency and token savings
+
+Brain (optional local decision model, Julia-1)
+  batcave brain install              Download Julia-1 from Hugging Face into ~/.batcave/brain
+  batcave brain start [--detach] [--device cpu|mps|cuda]
+  batcave brain status
 
 Team (works from any shell, no agent needed)
   batcave board [--mine]             batcave people
@@ -139,7 +235,19 @@ switch (cmd) {
     process.exit(r.status || 0);
   }
 
+  case 'brain': {
+    const sub = rest[0];
+    if (sub === 'install') brainInstall();
+    else if (sub === 'start') brainStart(Boolean(flags.detach));
+    else if (sub === 'status') await brainStatus();
+    else die('Usage: batcave brain <install|start|status>');
+    break;
+  }
+
+  case 'stats': await printStats(); break;
+
   case 'server': {
+    if (flags.brain) brainStart(true);
     const env = { ...process.env, ...(flags.port ? { PORT: String(flags.port) } : {}) };
     spawnSync(process.execPath, [path.join(ROOT, 'server', 'src', 'index.mjs')], { stdio: 'inherit', env });
     break;

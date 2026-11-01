@@ -40,28 +40,42 @@ function firstWarning(sessionId, file) {
   } catch { return true; }
 }
 
+// Remember how long each hook took and report it with the next request (no extra round trip).
+const LAST = () => path.join(HOME_DIR, 'last-hook.json');
+function takeLastTiming() {
+  try { const v = JSON.parse(fs.readFileSync(LAST(), 'utf8')); fs.unlinkSync(LAST()); return v; } catch { return null; }
+}
+export function saveTiming(agent, mode, ms) {
+  try { fs.mkdirSync(HOME_DIR, { recursive: true }); fs.writeFileSync(LAST(), JSON.stringify({ agent, mode, ms: Math.round(ms * 10) / 10 })); } catch {}
+}
+
+const ctxQuery = (ev, force) => `/api/context?session=${encodeURIComponent(`${ev.agent}:${ev.sessionId}`)}${ev.prompt ? `&prompt=${encodeURIComponent(String(ev.prompt).slice(0, 600))}` : ''}${force ? '&force=1' : ''}`;
+
 export async function handle(ev, { canAsk = true } = {}) {
   const cfg = loadConfig(ev.cwd || process.cwd());
   if (!cfg.ready) return { silent: true };
+  const last = takeLastTiming();
+  if (last) cfg.hookReport = `${last.agent}:${last.mode}:${last.ms}`;
 
   switch (ev.kind) {
     case 'session-start': {
       await api(cfg, 'POST', '/api/presence', { status: 'online', agent: 'idle', tool: ev.agent });
-      const ctx = await api(cfg, 'GET', '/api/context');
-      changedSinceLast(ev.sessionId, ctx.text);
+      const ctx = await api(cfg, 'GET', ctxQuery(ev, true));
       return { context: ctx.text };
     }
 
     case 'prompt': {
       await api(cfg, 'POST', '/api/events', { type: 'turn_start', now: 'thinking' });
-      const ctx = await api(cfg, 'GET', '/api/context');
-      return changedSinceLast(ev.sessionId, ctx.text) ? { context: ctx.text } : {};
+      const ctx = await api(cfg, 'GET', ctxQuery(ev));
+      const changed = ctx.changed ?? changedSinceLast(ev.sessionId, ctx.text);
+      return changed ? { context: ctx.text } : {};
     }
 
     case 'refresh': {
       // mid-session context refresh (used where prompts cannot carry context)
-      const ctx = await api(cfg, 'GET', '/api/context');
-      return changedSinceLast(ev.sessionId, ctx.text) ? { context: ctx.text } : {};
+      const ctx = await api(cfg, 'GET', ctxQuery(ev));
+      const changed = ctx.changed ?? changedSinceLast(ev.sessionId, ctx.text);
+      return changed ? { context: ctx.text } : {};
     }
 
     case 'pre-tool': {

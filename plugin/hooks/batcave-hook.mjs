@@ -4,7 +4,7 @@
 // Always fails open: a slow or missing server never blocks anyone's session.
 import fs from 'node:fs';
 import { normalize, adapterFor } from '../lib/agents.mjs';
-import { handle } from '../lib/hookcore.mjs';
+import { handle, saveTiming } from '../lib/hookcore.mjs';
 
 const mode = process.argv[2];
 const ai = process.argv.indexOf('--agent');
@@ -14,6 +14,8 @@ const adapter = adapterFor(agent);
 function readStdin() {
   try { return JSON.parse(fs.readFileSync(0, 'utf8') || '{}'); } catch { return {}; }
 }
+
+const t0 = performance.now();
 
 async function main() {
   const ev = normalize(agent, mode, readStdin());
@@ -30,4 +32,4 @@ main().catch((err) => {
   if (process.env.BATCAVE_DEBUG) process.stderr.write(`[batcave] ${agent} ${mode}: ${err.message}\n`);
   // Cursor expects an answer on pre-tool; default to allow on error.
   if (agent === 'cursor' && mode === 'pre-tool') process.stdout.write(JSON.stringify({ permission: 'allow' }));
-}).finally(() => process.exit(0));
+}).finally(() => { saveTiming(agent, mode, performance.now() - t0); process.exit(0); });

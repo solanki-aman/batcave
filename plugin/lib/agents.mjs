@@ -57,6 +57,7 @@ export function normalize(agent, mode, input = {}) {
     cwd: input.cwd || (Array.isArray(input.workspace_roots) && input.workspace_roots[0]) || process.env.GEMINI_PROJECT_DIR || process.env.CLAUDE_PROJECT_DIR || process.cwd(),
     sessionId: input.session_id ?? input.sessionId ?? input.conversation_id ?? input.sessionID ?? `${agent}-default`,
     toolName, tool, files, command,
+    prompt: typeof (input.prompt ?? input.user_prompt ?? input.message) === 'string' ? (input.prompt ?? input.user_prompt ?? input.message) : '',
     output: typeof output === 'string' ? output : JSON.stringify(output),
   };
 }

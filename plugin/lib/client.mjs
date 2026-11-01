@@ -56,9 +56,11 @@ export async function api(cfg, method, route, body, timeoutMs = 2500) {
         'x-batcave-user': cfg.user,
         'x-batcave-name': encodeURIComponent(cfg.name || cfg.user),
         ...(cfg.token ? { authorization: `Bearer ${cfg.token}` } : {}),
+        ...(cfg.hookReport ? { 'x-batcave-hook': cfg.hookReport } : {}),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
+    cfg.hookReport = undefined;
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(json.error || `${res.status} ${res.statusText}`);
     return json;

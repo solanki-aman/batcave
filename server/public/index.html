@@ -53,6 +53,23 @@ main{padding:20px 24px}
 .msg.agent .author{color:#A24E33}
 .sr{position:absolute;left:-9999px}
 .empty{color:var(--muted);padding:12px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:18px}
+.tile{background:var(--paper);border:.5px solid var(--line);border-radius:14px;padding:16px}
+.tile b{display:block;font:400 30px 'Anthropic Serif',Georgia,serif;font-variant-numeric:tabular-nums}
+.panel2{background:var(--paper);border:.5px solid var(--line);border-radius:14px;padding:16px;margin-bottom:18px;overflow-x:auto}
+.panel2 h3{margin:0 0 10px;font:500 16px 'Anthropic Serif',Georgia,serif}
+table.lat{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:13px}
+table.lat td,table.lat th{padding:7px 8px;border-bottom:.5px solid var(--line);text-align:right;white-space:nowrap}
+table.lat th{color:var(--muted);font-weight:500}
+table.lat td:first-child,table.lat th:first-child{text-align:left;font-family:'JetBrains Mono',monospace;font-size:12px}
+.barcell{width:40%}
+.bar{height:8px;border-radius:4px;background:#E8E6DC;position:relative}
+.bar i{position:absolute;inset:0 auto 0 0;border-radius:4px;background:#87867F}
+.bar i.p95{background:var(--clay);opacity:.45}
+.days{display:flex;align-items:flex-end;gap:6px;height:120px}
+.days div{flex:1;max-width:48px;display:flex;flex-direction:column;justify-content:flex-end;gap:2px;min-width:10px}
+.days span{display:block;border-radius:3px 3px 0 0}
+.suggest{margin-top:6px}
 </style>
 </head>
 <body>
@@ -64,6 +81,7 @@ main{padding:20px 24px}
       <button data-view="people">People</button>
       <button data-view="rooms">Rooms</button>
       <button data-view="decisions">Decisions</button>
+      <button data-view="stats">Stats</button>
     </nav>
   </div>
   <form class="who" id="whoForm">
@@ -98,6 +116,7 @@ async function refresh(){
     S.state = await api('GET','/api/state');
     document.getElementById('team').textContent = '· ' + S.state.team;
     if (S.view === 'rooms') S.messages = await api('GET', `/api/rooms/${encodeURIComponent(S.room)}/messages?limit=100`);
+    if (S.view === 'stats') S.stats = await api('GET', '/api/stats');
     render();
   } catch (e) { document.getElementById('app').innerHTML = `<p class="empty">Could not load: ${esc(e.message)}</p>`; }
 }
@@ -150,7 +169,7 @@ function renderRooms(){
   const rooms = S.state.rooms;
   return `<div class="rooms"><nav class="roomlist" aria-label="Rooms">${rooms.map(r=>`<button data-room="${esc(r.id)}" aria-current="${r.id===S.room}">#${esc(r.name)}</button>`).join('')}</nav>
     <section class="msgs" aria-label="#${esc(S.room)}">
-      ${S.messages.map(m=>`<div class="msg ${esc(m.kind)}">${m.kind==='event'?`${esc(nameOf(m.author))} ${esc(m.text)} · ${ago(m.at)}`:`<span class="author">${esc(nameOf(m.author))}${m.kind==='agent'?"'s agent":''}</span> <span class="meta">${ago(m.at)}</span><div>${esc(m.text)}</div>`}</div>`).join('') || '<p class="empty">No messages yet.</p>'}
+      ${S.messages.map(m=>`<div class="msg ${esc(m.kind)}">${m.kind==='event'?`${esc(nameOf(m.author))} ${esc(m.text)} · ${ago(m.at)}`:`<span class="author">${esc(nameOf(m.author))}${m.kind==='agent'?"'s agent":''}</span> <span class="meta">${ago(m.at)}</span><div>${esc(m.text)}</div>${m.meta && m.meta.suggestPin ? `<button class="btn small suggest" data-pin="${m.id}">Pin as decision</button>` : ''}`}</div>`).join('') || '<p class="empty">No messages yet.</p>'}
       <form id="say" class="row" style="margin-top:auto"><label class="sr" for="sayInput">Message #${esc(S.room)}</label><input id="sayInput" placeholder="Message #${esc(S.room)} · @name-agent asks their agent" style="flex:1"><button class="btn primary" type="submit">Send</button></form>
     </section></div>`;
 }
@@ -160,9 +179,37 @@ function renderDecisions(){
     <div class="msgs" style="min-height:0">${S.state.decisions.map(d=>`<div class="row" style="justify-content:space-between"><div>${esc(d.text)} <span class="meta">#${esc(d.room)} · ${esc(nameOf(d.author))} · ${ago(d.at)}</span></div><button class="btn small" data-retire="${d.id}">Retire</button></div>`).join('') || '<p class="empty">No decisions pinned.</p>'}</div>`;
 }
 
+function renderStats(){
+  const s = S.stats; if (!s) return '<p class="empty">Loading…</p>';
+  const n = (x) => Number(x || 0).toLocaleString('en-US'); const t = s.tokens; const c = s.counters || {};
+  const lat = Object.entries(s.latency).filter(([k]) => /^(hook|brain|agent)|api:GET \/api\/(context|guard)/.test(k)).sort();
+  const max = Math.max(1, ...lat.map(([, v]) => v.p95 || 0));
+  const days = Object.entries(s.daily || {}).sort().slice(-14);
+  const dmax = Math.max(1, ...days.map(([, d]) => d.injected + d.saved));
+  return `<div class="tiles">
+      <div class="tile"><span class="meta">Tokens saved</span><b>${n(t.saved)}</b><span class="meta">${t.savedPct}% of what agents would have received</span></div>
+      <div class="tile"><span class="meta">Injected into agents</span><b>${n(t.injected)}</b><span class="meta">team context sent</span></div>
+      <div class="tile"><span class="meta">Saved by dedupe</span><b>${n(t.savedDedupe)}</b><span class="meta">unchanged context not resent</span></div>
+      <div class="tile"><span class="meta">Saved by ranking</span><b>${n(t.savedRanking)}</b><span class="meta">irrelevant notes left out</span></div>
+      <div class="tile"><span class="meta">Brain</span><b style="font-size:22px">${s.brain.ready ? 'Ready' : s.brain.enabled ? 'Not running' : 'Off'}</b><span class="meta">${s.brain.ready ? esc(`${s.brain.model} on ${s.brain.device}`) : 'plain rules in use'}</span></div>
+    </div>
+    <section class="panel2" aria-label="Latency"><h3>Latency</h3>
+      ${lat.length ? `<table class="lat"><thead><tr><th>Where</th><th>Count</th><th>p50 ms</th><th>p95 ms</th><th class="barcell"></th></tr></thead><tbody>
+      ${lat.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${n(v.count)}</td><td>${v.p50 ?? '-'}</td><td>${v.p95 ?? '-'}</td><td class="barcell"><div class="bar"><i class="p95" style="width:${(v.p95||0)/max*100}%"></i><i style="width:${(v.p50||0)/max*100}%"></i></div></td></tr>`).join('')}
+      </tbody></table>` : '<p class="empty">No timings yet. They appear as agents run hooks.</p>'}
+    </section>
+    <section class="panel2" aria-label="Tokens per day"><h3>Tokens per day</h3>
+      ${days.length ? `<div class="days">${days.map(([d, v]) => `<div title="${esc(d)}: ${n(v.injected)} injected, ${n(v.saved)} saved"><span style="height:${v.saved/dmax*100}px;background:var(--clay);opacity:.55"></span><span style="height:${v.injected/dmax*100}px;background:#87867F"></span></div>`).join('')}</div>
+      <p class="meta" style="margin-top:8px">Grey: injected. Clay: saved.</p>` : '<p class="empty">No data yet.</p>'}
+    </section>
+    <section class="panel2" aria-label="Activity"><h3>Activity</h3>
+      <p>${n(c.claims)} claims · ${n(c.guard_checks)} guard checks (${n(c.guard_conflicts)} conflicts) · ${n(c.requests)} requests · ${n(c.handoffs)} handoffs · ${n(c.decisions)} decisions · ${n(c.brain_rank)} rankings · ${n(c.brain_classify)} messages classified</p>
+    </section>`;
+}
+
 function render(){
   const app = document.getElementById('app');
-  app.innerHTML = ({board:renderBoard, people:renderPeople, rooms:renderRooms, decisions:renderDecisions})[S.view]();
+  app.innerHTML = ({board:renderBoard, people:renderPeople, rooms:renderRooms, decisions:renderDecisions, stats:renderStats})[S.view]();
 }
 
 document.addEventListener('click', async (e) => {
@@ -172,6 +219,8 @@ document.addEventListener('click', async (e) => {
   if (c) { try { await api('POST', `/api/tasks/${c.dataset.claim}/claim`, { force: !!c.dataset.force }); } catch(err){ alertBox(err.message); } return refresh(); }
   const r = e.target.closest('[data-room]');
   if (r) { S.room = r.dataset.room; return refresh(); }
+  const pin = e.target.closest('[data-pin]');
+  if (pin) { const m = S.messages.find(x => String(x.id) === pin.dataset.pin); if (m) await api('POST','/api/decisions',{ text: m.text, room: m.room }); return refresh(); }
   const d = e.target.closest('[data-retire]');
   if (d) { await api('POST', `/api/decisions/${d.dataset.retire}/retire`); return refresh(); }
 });

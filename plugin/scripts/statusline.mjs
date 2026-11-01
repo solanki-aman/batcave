@@ -22,6 +22,7 @@ function render(s) {
   if (reqs) parts.push(`${reqs} request${reqs > 1 ? 's' : ''}`);
   if (reviews) parts.push(`${reviews} review${reviews > 1 ? 's' : ''} owed`);
   parts.push(mine ? `${mine.id} ${mine.status}` : 'no claim');
+  if (s.savings?.tokens) parts.push(`${s.savings.tokens >= 1000 ? `${Math.round(s.savings.tokens / 100) / 10}k` : s.savings.tokens} tok saved`);
   return parts.join(' · ');
 }
 
