@@ -1,7 +1,7 @@
 {
   "name": "batcave",
-  "version": "0.1.0",
-  "description": "Multiplayer Claude Code. A shared board with claims, people and presence, rooms, pinned decisions, requests between teammates' Claudes, handoffs, and an edit guard. Everyone runs their own Claude.",
+  "version": "0.2.0",
+  "description": "Multiplayer coding agents. A shared board with claims, people and presence, rooms, pinned decisions, requests between teammates' Claudes, handoffs, and an edit guard. Everyone runs their own agent; teammates can use Codex, Gemini CLI, Cursor, Copilot CLI or OpenCode via the batcave CLI.",
   "author": { "name": "Aman Solanki" },
   "license": "MIT",
   "keywords": ["collaboration", "team", "kanban", "multiplayer", "presence", "handoff"]

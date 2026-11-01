@@ -78,6 +78,7 @@ main{padding:20px 24px}
 const S = { view: 'board', room: 'team', state: null, messages: [] };
 const ls = { get(k){ try { return localStorage.getItem(k) || ''; } catch { return S['_'+k] || ''; } }, set(k,v){ try { localStorage.setItem(k,v); } catch { S['_'+k]=v; } } };
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const TOOLS = { claude: 'Claude Code', codex: 'Codex', gemini: 'Gemini CLI', antigravity: 'Antigravity', cursor: 'Cursor', copilot: 'Copilot CLI', opencode: 'OpenCode', kiro: 'Kiro', windsurf: 'Windsurf', cli: 'terminal' };
 const AV = ['#141413','#E3DACC','#87867F','#CBCADB','#BCD1CA','#EBCECE','#D97757'];
 const avColor = (id) => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; const bg = AV[h % AV.length]; return `background:${bg};color:${bg==='#141413'?'#FAF9F5':'#141413'}`; };
 const initials = (n) => esc(String(n||'?').split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase());
@@ -138,10 +139,10 @@ function renderPeople(){
     const task = S.state.tasks.find(t=>t.id===p.task);
     return `<article class="pcard">
       <div class="row"><span class="av" style="width:44px;height:44px;font-size:14px;${avColor(p.id)}">${initials(p.name)}</span>
-        <div style="flex:1"><div class="title">${esc(p.name)}${p.id===me?' <span class="meta">(you)</span>':''}</div><div class="meta">${esc(p.role||p.id)}</div></div>${badge}</div>
+        <div style="flex:1"><div class="title">${esc(p.name)}${p.id===me?' <span class="meta">(you)</span>':''}</div><div class="meta">${esc(p.role||p.id)}${p.tool?' · '+esc(TOOLS[p.tool]||p.tool):''}</div></div>${badge}</div>
       <div class="now"><div class="meta">Now · ${ago(p.since||p.lastSeen)}</div><div>${esc(p.now||'idle')}</div>${task?`<div class="mono">${esc(task.id)} · ${esc(task.branch||task.title)}</div>`:''}</div>
       <div class="stats"><div><b>${p.stats.shipped}</b><span class="meta">shipped</span></div><div><b>${p.stats.prsOpen}</b><span class="meta">PRs open</span></div><div><b>${p.stats.reviewsOwed}</b><span class="meta">reviews owed</span></div></div>
-      ${p.id!==me?`<form class="row" data-ask="${esc(p.id)}"><label class="sr" for="ask-${esc(p.id)}">Ask ${esc(p.name)}'s Claude</label><input id="ask-${esc(p.id)}" placeholder="Ask ${esc(p.name)}'s Claude…" style="flex:1"><button class="btn small" type="submit">Request</button></form>`:''}
+      ${p.id!==me?`<form class="row" data-ask="${esc(p.id)}"><label class="sr" for="ask-${esc(p.id)}">Ask ${esc(p.name)}'s agent</label><input id="ask-${esc(p.id)}" placeholder="Ask ${esc(p.name)}'s agent…" style="flex:1"><button class="btn small" type="submit">Request</button></form>`:''}
     </article>`;}).join('')}</div>`;
 }
 
@@ -149,8 +150,8 @@ function renderRooms(){
   const rooms = S.state.rooms;
   return `<div class="rooms"><nav class="roomlist" aria-label="Rooms">${rooms.map(r=>`<button data-room="${esc(r.id)}" aria-current="${r.id===S.room}">#${esc(r.name)}</button>`).join('')}</nav>
     <section class="msgs" aria-label="#${esc(S.room)}">
-      ${S.messages.map(m=>`<div class="msg ${esc(m.kind)}">${m.kind==='event'?`${esc(nameOf(m.author))} ${esc(m.text)} · ${ago(m.at)}`:`<span class="author">${esc(nameOf(m.author))}${m.kind==='agent'?"'s Claude":''}</span> <span class="meta">${ago(m.at)}</span><div>${esc(m.text)}</div>`}</div>`).join('') || '<p class="empty">No messages yet.</p>'}
-      <form id="say" class="row" style="margin-top:auto"><label class="sr" for="sayInput">Message #${esc(S.room)}</label><input id="sayInput" placeholder="Message #${esc(S.room)} · @name-claude asks their Claude" style="flex:1"><button class="btn primary" type="submit">Send</button></form>
+      ${S.messages.map(m=>`<div class="msg ${esc(m.kind)}">${m.kind==='event'?`${esc(nameOf(m.author))} ${esc(m.text)} · ${ago(m.at)}`:`<span class="author">${esc(nameOf(m.author))}${m.kind==='agent'?"'s agent":''}</span> <span class="meta">${ago(m.at)}</span><div>${esc(m.text)}</div>`}</div>`).join('') || '<p class="empty">No messages yet.</p>'}
+      <form id="say" class="row" style="margin-top:auto"><label class="sr" for="sayInput">Message #${esc(S.room)}</label><input id="sayInput" placeholder="Message #${esc(S.room)} · @name-agent asks their agent" style="flex:1"><button class="btn primary" type="submit">Send</button></form>
     </section></div>`;
 }
 

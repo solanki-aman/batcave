@@ -1,7 +1,7 @@
 {
   "name": "batcave-server",
-  "version": "0.1.0",
-  "description": "Shared state server for Batcave: people, board, rooms, decisions, requests and handoffs for teams using Claude Code.",
+  "version": "0.2.0",
+  "description": "Shared state server for Batcave: people, board, rooms, decisions, requests and handoffs for teams using coding agents.",
   "type": "module",
   "main": "src/index.mjs",
   "scripts": {

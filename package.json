@@ -1,0 +1,12 @@
+{
+  "name": "batcave",
+  "version": "0.2.0",
+  "description": "Multiplayer coding agents. A shared board, presence, rooms, decisions, requests, handoffs and an edit guard for teams using Claude Code, Codex, Gemini CLI, Antigravity, Cursor, Copilot CLI, OpenCode, Kiro and Windsurf.",
+  "type": "module",
+  "bin": { "batcave": "cli/batcave.mjs" },
+  "files": ["cli", "plugin", "server/src", "server/public", "server/package.json"],
+  "engines": { "node": ">=18" },
+  "repository": { "type": "git", "url": "https://github.com/solanki-aman/batcave.git" },
+  "keywords": ["claude-code", "codex", "gemini-cli", "cursor", "copilot", "opencode", "mcp", "collaboration", "kanban", "multiplayer"],
+  "license": "MIT"
+}

@@ -1,22 +1,24 @@
 <p align="center">
-  <img src="docs/assets/hero.svg" alt="Batcave: multiplayer Claude Code" width="100%">
+  <img src="docs/assets/hero.svg" alt="Batcave: multiplayer coding agents" width="100%">
 </p>
 
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-141413?style=flat-square"></a>
   <img alt="Node 18+" src="https://img.shields.io/badge/node-18%2B-141413?style=flat-square">
   <img alt="Zero dependencies" src="https://img.shields.io/badge/dependencies-0-D97757?style=flat-square">
-  <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-D97757?style=flat-square">
+  <img alt="Agents: 9" src="https://img.shields.io/badge/agents-9-D97757?style=flat-square">
+  <img alt="MCP" src="https://img.shields.io/badge/MCP-server-141413?style=flat-square">
 </p>
 
 <p align="center">
-  <b>A shared board, live presence, rooms, pinned decisions, requests between teammates' Claudes, handoffs and an edit guard.</b><br>
-  For teams where everyone runs their own Claude Code.
+  <b>A shared board, live presence, rooms, pinned decisions, requests between teammates' agents, handoffs and an edit guard.</b><br>
+  For teams where everyone runs their own coding agent: Claude Code, Codex, Gemini CLI, Antigravity, Cursor, Copilot CLI, OpenCode, Kiro or Windsurf.
 </p>
 
 <p align="center">
   <a href="#quick-start">Quick start</a> ·
   <a href="#a-day-in-batcave">A day in Batcave</a> ·
+  <a href="#works-with">Works with</a> ·
   <a href="#features">Features</a> ·
   <a href="#how-it-works">How it works</a> ·
   <a href="#api-reference">API</a> ·
@@ -27,7 +29,7 @@
 
 ## See it
 
-**In your terminal.** Claim a task, get stopped before you overwrite a teammate's work, and run a request a teammate sent to your Claude.
+**In your terminal.** Claim a task, get stopped before you overwrite a teammate's work, and run a request a teammate sent to your agent.
 
 <p align="center"><img src="docs/assets/terminal.gif" alt="Claude Code session using Batcave: board, claim, guard and request" width="88%"></p>
 
@@ -51,11 +53,35 @@ So teams are back to asking the basic questions all day:
 
 Batcave answers them inside the tool everyone already uses, without changing how anyone works.
 
-### The one rule: everyone runs their own Claude
+### The one rule: everyone runs their own agent
 
-Batcave never holds anyone's Claude credentials, never proxies model calls, and never runs one person's Claude on another person's behalf.
+Batcave never holds anyone's credentials, never proxies model calls, and never runs one person's agent on another person's behalf.
 
-When Nate wants Aman's Claude to do something, he sends a **request**. It waits in Aman's inbox and runs only if Aman chooses to run it, in his own session, as his own prompt. Every person's usage stays on their own account, and every person stays in charge of their own agent.
+Aman can be on Claude Code, Nate on Codex and Priya on Cursor. They share one board, one set of decisions and one guard.
+
+When Nate wants Aman's agent to do something, he sends a **request**. It waits in Aman's inbox and runs only if Aman chooses to run it, in his own session, as his own prompt. Every person's usage stays on their own account, and every person stays in charge of their own agent.
+
+---
+
+## Works with
+
+Batcave is not tied to one vendor. One server, one board, any mix of agents.
+
+| Agent | Install | Team context | Activity | Guard | Commands |
+|---|---|---|---|---|---|
+| **Claude Code** | plugin | session start + every prompt | yes | asks you | `/batcave:*`, status line |
+| **Codex CLI** | `batcave init` | session start + every prompt | yes | asks you | MCP tools |
+| **Gemini CLI / Antigravity** | `batcave init` | session start + every prompt | yes | blocks once, retry allowed | `/batcave:*` |
+| **Cursor** | `batcave init` | session start + after tool calls | yes | blocks once, retry allowed | `/batcave-*` |
+| **GitHub Copilot CLI** | `batcave init` | session start + after tool calls | yes | asks you | MCP tools |
+| **OpenCode** | `batcave init` | `AGENTS.md` + `batcave_whoami` | yes | blocks once, retry allowed | MCP tools |
+| **Kiro** | `batcave init` | steering file | tools only | not yet | MCP tools |
+| **Windsurf** | `batcave init` | `AGENTS.md` | tools only | not yet | MCP tools |
+| **Any MCP agent** | add the MCP server by hand | `AGENTS.md` | tools only | no | MCP tools |
+
+"Blocks once, retry allowed" is for agents whose hooks cannot pause to ask you: Batcave stops the first edit, the agent tells you why, and if you say go ahead the retry goes through.
+
+Adapters follow each vendor's published hook and MCP formats and are tested with simulated payloads. Vendors change these often; if one breaks, `batcave doctor` and `BATCAVE_DEBUG=1` will show where.
 
 ---
 
@@ -79,30 +105,48 @@ node server/src/index.mjs
 
 For a real team, run it with Docker behind HTTPS. See [Deploying the server](#deploying-the-server).
 
-### 2. Install the plugin (every teammate)
+### 2. Connect your agent (every teammate)
+
+**Claude Code** installs Batcave as a plugin:
 
 ```text
 /plugin marketplace add solanki-aman/batcave
 /plugin install batcave@batcave
-```
-
-Restart Claude Code, then:
-
-```text
 /batcave:setup
 ```
 
-The setup skill asks for the server URL, the team token, your handle and your name. It writes `~/.batcave/config.json`, offers to install the status line, and finishes with a health check:
+**Everything else** (Codex, Gemini CLI, Antigravity, Cursor, Copilot CLI, OpenCode, Kiro, Windsurf) uses one command. It finds the agents on your machine and wires Batcave into each one's own config:
+
+```bash
+npx github:solanki-aman/batcave init \
+  --url https://batcave.example.com --token <team token> \
+  --user aman --name "Aman" --repo
+```
 
 ```text
-✓ Node 22.23.4
-✓ Config file ~/.batcave/config.json
-✓ Server up: team "acme" v0.1.0
-✓ Authenticated. Active task: none
-✓ Status line installed
+✓ Runtime installed at ~/.batcave/runtime
+✓ Signed in as aman (Aman)
 
-All good.
+✓ Codex CLI
+    ~/.codex/config.toml
+✓ Gemini CLI / Antigravity
+    ~/.gemini/settings.json
+    ~/.gemini/commands/batcave/*.toml  (/batcave:board, /batcave:claim, ...)
+✓ Cursor
+    ~/.cursor/hooks.json
+    ~/.cursor/mcp.json
+    ~/.cursor/commands/batcave-*.md  (/batcave-board, /batcave-claim, ...)
+✓ GitHub Copilot CLI
+    ~/.copilot/hooks/batcave.json
+    ~/.copilot/mcp-config.json
+✓ OpenCode
+    ~/.config/opencode/plugins/batcave.js
+    ~/.config/opencode/opencode.json
+
+✓ Added Batcave instructions to ./AGENTS.md
 ```
+
+Pick agents explicitly with `--agent codex,cursor` (or `--agent all`). `--repo` adds a short Batcave section to the repo's `AGENTS.md`, which most agents read. Every change is reversible with `batcave uninstall`; JSON files get a one-time `.bak-batcave` backup and TOML gets a clearly marked block.
 
 ### 3. Play
 
@@ -114,7 +158,7 @@ All good.
 /batcave:people
 ```
 
-Or just talk to Claude: *"what is Nate working on?"*, *"claim the empty cart task"*, *"hand this to Priya"*.
+Or just talk to your agent: *"what is Nate working on?"*, *"claim the empty cart task"*, *"hand this to Priya"*.
 
 ---
 
@@ -124,7 +168,7 @@ Five moments, end to end. Each diagram is exactly what the plugin and server do.
 
 ### 9:02 &nbsp; Aman opens Claude Code and already knows the score
 
-The `SessionStart` hook signs him in and hands Claude the team's context before he types anything.
+The session-start hook signs him in and hands his agent the team's context before he types anything. The same happens in Codex, Gemini CLI, Cursor and Copilot CLI.
 
 ```mermaid
 sequenceDiagram
@@ -140,7 +184,7 @@ sequenceDiagram
     Hook->>S: GET /api/context
     S-->>Hook: active task, decisions, room messages, requests, handoffs
     Hook-->>CC: additionalContext
-    Note over CC: Claude now knows: T-3 is in progress,<br/>"no new colors" is decided,<br/>Nate asked for a screenshot
+    Note over CC: The agent now knows: T-3 is in progress,<br/>"no new colors" is decided,<br/>Nate asked for a screenshot
     CC-->>Aman: ready, with the team in mind
 ```
 
@@ -174,12 +218,12 @@ sequenceDiagram
 
 ### 10:40 &nbsp; The guard stops a collision before it happens
 
-Aman's Claude goes to edit `tokens.ts`. Nate's Claude edited it four minutes ago.
+Aman's Claude goes to edit `tokens.ts`. Nate's Codex edited it four minutes ago. Different vendors, same guard.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant N as Nate's Claude
+    participant N as Nate's Codex
     participant S as Batcave server
     participant A as Aman's Claude
     participant H as PreToolUse hook
@@ -189,14 +233,14 @@ sequenceDiagram
     Note over S: touch recorded (Nate, T-4, 10:36)
     A->>H: about to Edit src/theme/tokens.ts
     H->>S: GET /api/guard?files=src/theme/tokens.ts
-    S-->>H: conflict: Nate's Claude, 4m ago, T-4
+    S-->>H: conflict: Nate's agent, 4m ago, T-4
     H-->>A: permissionDecision: ask
-    A-->>Aman: "Nate's Claude edited it 4m ago. Allow this edit?"
+    A-->>Aman: "Nate's agent edited it 4m ago. Allow this edit?"
     Aman->>A: no
     A->>S: batcave_say to the T-4 room: "Can the email token land with T-4?"
 ```
 
-### 11:05 &nbsp; Nate asks Aman's Claude for a favor
+### 11:05 &nbsp; Nate asks Aman's agent for a favor
 
 Requests are how one teammate gets help from another's agent without anyone borrowing a subscription.
 
@@ -208,7 +252,7 @@ sequenceDiagram
     participant AC as Aman's Claude
     actor Aman
 
-    Nate->>S: "@aman-claude add a screenshot to the PR"
+    Nate->>S: "@aman-agent add a screenshot to the PR"
     S->>S: create request R-1 (pending)
     S-)AC: next prompt: "1 pending request. Do not act unless the user chooses."
     Note over Aman: status line shows "1 request"
@@ -230,7 +274,7 @@ sequenceDiagram
     actor Aman
     participant AC as Aman's Claude
     participant S as Batcave server
-    participant PC as Priya's Claude
+    participant PC as Priya's Cursor
     actor Priya
 
     Aman->>AC: /batcave:handoff priya
@@ -256,9 +300,9 @@ sequenceDiagram
 | **Claims** | `/batcave:claim T-14` | Assigns the task, names the branch, opens its room, loads its context. One active claim by default; stale claims can be taken over. |
 | **People** | Presence and stats | Who is online, whose agent is running, what it is doing right now, and this week's shipped, PRs open, reviews owed, asks pending. |
 | **Rooms** | One per task, plus `#team` | Agents post commits and status changes; people talk. |
-| **Decisions** | Pinned once, followed everywhere | Every teammate's Claude sees pinned decisions in its context. |
-| **Requests** | Ask a teammate's Claude | Lands in their inbox. They choose run, edit first, or decline. |
-| **Guard** | Collision warning | Asks before Claude edits a file another teammate's agent touched recently. |
+| **Decisions** | Pinned once, followed everywhere | Every teammate's agent sees pinned decisions in its context. |
+| **Requests** | Ask a teammate's agent | Lands in their inbox. They choose run, edit first, or decline. |
+| **Guard** | Collision warning | Stops an agent before it edits a file another teammate's agent touched recently, across vendors. |
 | **Handoff** | Pass the baton | Branch, summary, todos and decisions in one packet. `/batcave:pickup` starts with full context. |
 | **Pulse** | Catch up | What shipped, what waits on you, what is running, stale claims, new decisions. |
 | **Dashboard** | For the whole team | Board, People, Rooms and Decisions in the browser for PMs and designers. |
@@ -279,27 +323,43 @@ A claim with no agent activity for 24 hours (configurable) is marked **stale**. 
 | `/batcave:claim <id>` | Claim a task, create its branch, load its context. |
 | `/batcave:people` | See teammates, their agents' live state and weekly stats. |
 | `/batcave:room [room]` | Read your task's room, or any room. |
-| `/batcave:say <msg> \| summary` | Post to the room, or let Claude draft a summary of its work for you to approve. |
-| `/batcave:decide <decision>` | Pin a decision for every teammate's Claude. No arguments lists them. |
-| `/batcave:ask <handle> <ask>` | Send a request to a teammate's Claude. |
-| `/batcave:requests` | Review asks for your Claude: run, edit first, or decline. |
+| `/batcave:say <msg> \| summary` | Post to the room, or let your agent draft a summary of its work for you to approve. |
+| `/batcave:decide <decision>` | Pin a decision for every teammate's agent. No arguments lists them. |
+| `/batcave:ask <handle> <ask>` | Send a request to a teammate's agent. |
+| `/batcave:requests` | Review asks for your agent: run, edit first, or decline. |
 | `/batcave:handoff <handle> [id]` | Hand off a task with a summary and todos. |
 | `/batcave:pickup <id>` | Pick up a handoff and get briefed. |
 | `/batcave:pulse [hours]` | Catch up on the team. |
 | `/batcave:setup` | Set up or repair Batcave on this machine. |
 
+### From any shell
+
+The `batcave` CLI gives humans the same powers without an agent:
+
+```bash
+batcave board              # the board
+batcave people             # who is doing what
+batcave claim T-14         # claim a task
+batcave say "shipping the toggle today"
+batcave decide "Reuse surface tokens. No new colors."
+batcave ask nate "can your agent add the email-safe token to T-4?"
+batcave requests           # asks for your agent
+batcave pulse              # catch up
+batcave line               # one-line status, for tmux or your prompt
+```
+
 ### What happens automatically
 
-| Moment | Hook | Effect |
+| Moment | Hook (Claude Code / Codex name) | Effect |
 |---|---|---|
-| Session starts | `SessionStart` | You show as online. Claude gets your task, decisions, room messages, requests and handoffs. |
-| You send a prompt | `UserPromptSubmit` | Your agent shows as running. Claude gets the team context again only if it changed. |
-| Claude is about to edit | `PreToolUse` | The guard checks for recent edits by other teammates' agents. |
-| Claude edits or runs a command | `PostToolUse` | Your "now" line updates. `git commit` posts to your room. `gh pr create` moves your card to In review. |
-| Claude finishes a turn | `Stop` | Your agent shows as idle. |
+| Session starts | `SessionStart` | You show as online. Your agent gets your task, decisions, room messages, requests and handoffs. |
+| You send a prompt | `UserPromptSubmit` | Your agent shows as running and gets the team context again only if it changed. |
+| Your agent is about to edit | `PreToolUse` | The guard checks for recent edits by other teammates' agents. |
+| Your agent edits or runs a command | `PostToolUse` | Your "now" line updates. `git commit` posts to your room. `gh pr create` moves your card to In review. |
+| Your agent finishes a turn | `Stop` | Your agent shows as idle. |
 | Session ends | `SessionEnd` | You show as offline. |
 
-Every hook fails open with a 2.5 second timeout. If the server is slow or down, Claude Code keeps working and the status line says `○ batcave offline`.
+Every hook fails open with a 2.5 second timeout. If the server is slow or down, your agent keeps working and the status line says `○ batcave offline`.
 
 ---
 
@@ -311,10 +371,11 @@ Batcave has two parts.
 
 **The server** (`server/`) holds the team's shared state: people, tasks, rooms, messages, decisions, requests, handoffs and recent file edits. It exposes a JSON API, a server-sent event stream and the web dashboard. One per team.
 
-**The Claude Code plugin** (`plugin/`) is installed by each teammate:
+**The agent integration** (`plugin/` and `cli/`) is installed by each teammate, for whichever agent they use:
 
-- **Hooks** report presence and activity, and inject the team's context into Claude's prompt.
-- **An MCP server** gives Claude 18 tools to read and change the shared state.
+- **Hooks** report presence and activity, and inject the team's context into the agent's prompt. One hook script serves every agent; small adapters translate each vendor's payloads and replies.
+- **An MCP server** gives the agent 18 tools to read and change the shared state.
+- **The `batcave` CLI** installs everything into each agent's own config, and gives humans the board from any shell.
 - **Slash commands** give people one-word shortcuts.
 - **A status line** shows the team at a glance.
 - **A setup skill** walks anyone through installation.
@@ -323,7 +384,7 @@ Batcave has two parts.
 
 - **Zero dependencies everywhere.** Node 18 built-ins only. The plugin works right after install, and the server is one `node` command.
 - **State lives on the server, work lives on laptops.** The server never sees code: only file paths, branch names, commit subjects and the messages people choose to post.
-- **Context is pushed, not pulled.** Decisions and room messages reach Claude through hooks, so nobody has to remember to ask. Injection is deduplicated per session to save tokens.
+- **Context is pushed, not pulled.** Decisions and room messages reach every agent through hooks, so nobody has to remember to ask. Injection is deduplicated per session to save tokens.
 - **Fail open.** A missing server never blocks anyone's work.
 
 ### Repository layout
@@ -332,7 +393,9 @@ Batcave has two parts.
 batcave/
 ├── .claude-plugin/marketplace.json   # lets /plugin marketplace add find the plugin
 ├── .claude/skills/batcave-setup      # symlink so the setup skill works inside this repo
-├── plugin/                           # the Claude Code plugin
+├── cli/batcave.mjs                   # installer and shell commands
+├── cli/installers.mjs                # per-agent config writers
+├── plugin/                           # Claude Code plugin, and the shared runtime for every agent
 │   ├── .claude-plugin/plugin.json
 │   ├── .mcp.json                     # registers the MCP server
 │   ├── hooks/hooks.json              # hook wiring
@@ -343,7 +406,10 @@ batcave/
 │   ├── scripts/setup.mjs             # write config, verify, install status line
 │   ├── scripts/doctor.mjs            # health check
 │   ├── scripts/statusline.mjs        # status line, cached 10 s
-│   └── lib/client.mjs                # config and HTTP client shared by all of the above
+│   ├── lib/agents.mjs                # per-agent payload and reply adapters
+│   ├── lib/hookcore.mjs              # agent-independent hook logic
+│   ├── lib/tools.mjs                 # the 18 tools, shared by MCP and the CLI
+│   └── lib/client.mjs                # config and HTTP client
 ├── server/
 │   ├── src/index.mjs                 # HTTP API, SSE, domain logic
 │   ├── src/store.mjs                 # JSON persistence
@@ -424,14 +490,14 @@ All `/api/*` routes except `/api/health` need `Authorization: Bearer <team token
 | POST | `/api/decisions` | `text`, `room` | Pin a decision. |
 | POST | `/api/decisions/:id/retire` | | Retire a decision. |
 | GET | `/api/requests` | `?box=inbox\|sent&status=` | Your requests. |
-| POST | `/api/requests` | `to`, `text`, `room` | Ask a teammate's Claude. |
+| POST | `/api/requests` | `to`, `text`, `room` | Ask a teammate's agent. |
 | POST | `/api/requests/:id/resolve` | `action: accept\|decline` | Recipient only. |
 | POST | `/api/handoffs` | `task`, `to`, `summary`, `todos` | Owner only. Transfers the card. |
 | GET | `/api/handoffs` | | Open handoffs to or from you. |
 | POST | `/api/handoffs/:id/pickup` | | Recipient only. Returns the packet. |
 | POST | `/api/events` | `type`, `files`, `command`, `summary`, `url` | Activity from hooks: `turn_start`, `turn_end`, `edit`, `command`, `commit`, `pr`. |
 | GET | `/api/guard` | `?files=a,b&minutes=` | Recent edits by others to these files. |
-| GET | `/api/context` | | The context bundle injected into Claude, with ready-to-use `text`. |
+| GET | `/api/context` | | The context bundle injected into agents, with ready-to-use `text`. |
 | GET | `/api/pulse` | `?since=<ms>` | Done, review, running, stale, new decisions. |
 
 </details>
@@ -441,9 +507,9 @@ All `/api/*` routes except `/api/health` need `Authorization: Bearer <team token
 ## Security and privacy
 
 - **Shared team token.** v0.1 trusts the `X-Batcave-User` header from anyone holding the token. Fine for a trusted team behind HTTPS or on a private network. Per-user tokens and SSO are on the roadmap. Do not expose an untrusted, public server.
-- **What leaves a laptop.** Handle and name, presence, claims, repo-relative paths of files Claude edits, the first line of commands Claude runs, commit subjects, PR URLs, and whatever people or Claude post with `/batcave:say`. Never file contents or diffs. Prompts are not sent; the "now" line says things like "thinking", "editing Header.tsx" or "running npm test".
+- **What leaves a laptop.** Handle and name, presence, claims, repo-relative paths of files agents edit, the first line of commands agents run, commit subjects, PR URLs, and whatever people or agents post with `/batcave:say`. Never file contents or diffs. Prompts are not sent; the "now" line says things like "thinking", "editing Header.tsx" or "running npm test".
 - **Opt out per repo** with `"shareActivity": false` in `.batcave.json`.
-- **Requests never run themselves.** The injected context tells Claude not to act on a request unless the user picks it in `/batcave:requests`.
+- **Requests never run themselves.** The injected context tells the agent not to act on a request unless the user picks it in `/batcave:requests`.
 - **Secrets.** The token lives only in `~/.batcave/config.json` (mode 600) or environment variables. `.batcave.json` is for non-secret settings only.
 
 ---
@@ -480,6 +546,7 @@ docker run -d --name batcave -p 4777:4777 \
 - [ ] **Shared preview.** Tunnel a teammate's dev server into the room so PMs and designers see the running app.
 - [ ] **Inline review** on diff cards, fed back into the owning agent's context.
 - [ ] **Decision watcher.** Flag plans and diffs that contradict a pinned decision.
+- [ ] **Hooks for Kiro and Windsurf**, so they get presence and the guard too.
 - [ ] **Per-user tokens and SSO**, multiple teams per server, Postgres store.
 - [ ] **GitHub sync.** Import issues as cards and mark cards done on merge.
 
@@ -490,7 +557,13 @@ docker run -d --name batcave -p 4777:4777 \
 <details>
 <summary><b>Is there one shared agent the whole team prompts?</b></summary>
 
-No, on purpose. Each person's Claude runs on their own account. Requests, handoffs and shared context give most of the benefit of a shared agent while each person stays in control of their own.
+No, on purpose. Each person's agent runs on their own account. Requests, handoffs and shared context give most of the benefit of a shared agent while each person stays in control of their own.
+</details>
+
+<details>
+<summary><b>Can my team mix agents?</b></summary>
+
+Yes, that is the point. Each person picks their own agent. The board, decisions, requests and the guard work the same across all of them, so Nate's Codex is warned about a file Aman's Claude just changed.
 </details>
 
 <details>
@@ -502,13 +575,13 @@ No. Work happens in each person's local repo and branch, same as today.
 <details>
 <summary><b>What if the server goes down?</b></summary>
 
-Claude Code keeps working. Hooks time out quietly, the status line shows `○ batcave offline`, and everything syncs again when the server is back.
+Your agent keeps working. Hooks time out quietly, the status line shows `○ batcave offline`, and everything syncs again when the server is back.
 </details>
 
 <details>
 <summary><b>Can non-engineers use it?</b></summary>
 
-Yes. The dashboard at the server URL shows the board, people, rooms and decisions, and lets anyone add tasks, post, pin decisions and send requests to an engineer's Claude.
+Yes. The dashboard at the server URL shows the board, people, rooms and decisions, and lets anyone add tasks, post, pin decisions and send requests to an engineer's agent.
 </details>
 
 <details>

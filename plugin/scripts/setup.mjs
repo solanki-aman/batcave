@@ -59,4 +59,4 @@ if (args.statusline) {
   }
 }
 
-console.log('\nDone. Restart Claude Code, then try /batcave:board and /batcave:people.');
+console.log('\nDone. Restart your coding agent, then try the board and people commands.');

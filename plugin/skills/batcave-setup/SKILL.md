@@ -1,11 +1,11 @@
 ---
 name: batcave-setup
-description: Set up Batcave, the multiplayer layer for Claude Code. Use when someone wants to join their team's Batcave, deploy a Batcave server for their team, fix a broken Batcave install, or asks how to get started with Batcave.
+description: Set up Batcave, the multiplayer layer for coding agents (Claude Code, Codex, Gemini CLI, Antigravity, Cursor, Copilot CLI, OpenCode, Kiro, Windsurf). Use when someone wants to join their team's Batcave, connect another agent, deploy a Batcave server, fix a broken install, or asks how to get started.
 ---
 
 # Batcave setup
 
-Batcave connects each teammate's own Claude Code to a shared server that holds the team's board, people, rooms, decisions, requests and handoffs. Every person keeps running Claude under their own login; Batcave only shares state between sessions. Your job is to get the person from nothing to a passing doctor check, doing the work yourself and asking only for what you cannot know.
+Batcave connects each teammate's own coding agent to a shared server that holds the team's board, people, rooms, decisions, requests and handoffs. Every person keeps running their own agent under their own login, and teammates can use different agents; Batcave only shares state between sessions. Your job is to get the person from nothing to a passing doctor check, doing the work yourself and asking only for what you cannot know.
 
 The scripts you will run live in the `scripts` folder of the Batcave plugin, two levels up from this skill's folder (`<plugin>/scripts/setup.mjs`, `doctor.mjs`, `statusline.mjs`). Resolve that absolute path first and use it in every command.
 
@@ -23,7 +23,11 @@ Confirm it is up with `curl <url>/api/health`; the response should show the team
 
 ## Step 3: Check prerequisites
 
-Run `node --version` and confirm it is 18 or newer, and confirm `git` is installed. If the Batcave plugin is not installed yet, tell the person to run these two commands in Claude Code and then restart it, since you cannot run slash commands for them:
+Run `node --version` and confirm it is 18 or newer, and confirm `git` is installed. Ask which agents they use if it is not obvious; `npx github:solanki-aman/batcave agents` lists the ones found on the machine.
+
+If they use agents other than Claude Code, Step 4 is a single command: `npx github:solanki-aman/batcave init --url <url> --token <token> --user <handle> --name "<name>"`, optionally with `--agent codex,cursor` to choose agents and `--repo` to add a Batcave section to the repo's `AGENTS.md`. It installs a runtime in `~/.batcave/runtime`, writes the config, and wires hooks, the MCP server and commands into each agent's own config with backups. Read its output back to the person, including any agent marked tools only, then go to Step 6.
+
+For Claude Code, if the Batcave plugin is not installed yet, tell the person to run these two commands in Claude Code and then restart it, since you cannot run slash commands for them:
 
 `/plugin marketplace add solanki-aman/batcave`
 `/plugin install batcave@batcave`
@@ -42,8 +46,8 @@ If the team wants shared defaults for a repo, create `.batcave.json` in the repo
 
 Run `node <plugin>/scripts/doctor.mjs` from inside the person's repo. Every line should be a check mark; warnings about the status line are fine if they declined it. If something fails, the doctor prints the fix; apply it and run doctor again.
 
-Finish by telling them to restart Claude Code so the hooks load, then try `/batcave:board`, `/batcave:people` and `/batcave:pulse`. Mention the dashboard at the server URL for teammates who do not use a terminal, and that they sign in there with the same handle and token.
+Finish by telling them to restart their agents so the hooks load. In Claude Code and Gemini CLI they can try `/batcave:board`; in Cursor `/batcave-board`; in any agent they can simply ask for the board, and from any shell `batcave board` works. Mention the dashboard at the server URL for teammates who do not use a terminal, and that they sign in there with the same handle and token.
 
 ## Troubleshooting
 
-If hooks seem silent, run any hook with `BATCAVE_DEBUG=1` set to see errors; hooks are designed to fail open, so a down server never blocks Claude. A 401 means the token is wrong. A "did not answer" error means the URL is wrong, the server is down, or a VPN is needed. If the guard flags files from another machine with absolute paths, the person is outside a git repo; open Claude Code in the repo root instead.
+To remove Batcave from other agents, run `batcave uninstall --agent <name>`; backups of edited files are kept as `.bak-batcave`. If hooks seem silent, run any hook with `BATCAVE_DEBUG=1` set to see errors; hooks are designed to fail open, so a down server never blocks Claude. A 401 means the token is wrong. A "did not answer" error means the URL is wrong, the server is down, or a VPN is needed. If the guard flags files from another machine with absolute paths, the person is outside a git repo; open Claude Code in the repo root instead.
