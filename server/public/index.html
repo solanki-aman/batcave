@@ -182,7 +182,7 @@ function renderDecisions(){
 function renderStats(){
   const s = S.stats; if (!s) return '<p class="empty">Loading…</p>';
   const n = (x) => Number(x || 0).toLocaleString('en-US'); const t = s.tokens; const c = s.counters || {};
-  const lat = Object.entries(s.latency).filter(([k]) => /^(hook|scout|agent)|api:GET \/api\/(context|guard)/.test(k)).sort();
+  const lat = Object.entries(s.latency).filter(([k]) => /^(hook|alfred|agent)|api:GET \/api\/(context|guard)/.test(k)).sort();
   const max = Math.max(1, ...lat.map(([, v]) => v.p95 || 0));
   const days = Object.entries(s.daily || {}).sort().slice(-14);
   const dmax = Math.max(1, ...days.map(([, d]) => d.injected + d.saved));
@@ -191,7 +191,7 @@ function renderStats(){
       <div class="tile"><span class="meta">Injected into agents</span><b>${n(t.injected)}</b><span class="meta">team context sent</span></div>
       <div class="tile"><span class="meta">Saved by dedupe</span><b>${n(t.savedDedupe)}</b><span class="meta">unchanged context not resent</span></div>
       <div class="tile"><span class="meta">Saved by ranking</span><b>${n(t.savedRanking)}</b><span class="meta">irrelevant notes left out</span></div>
-      <div class="tile"><span class="meta">Scout</span><b style="font-size:22px">${s.scout.ready ? 'Ready' : s.scout.enabled ? 'Not running' : 'Off'}</b><span class="meta">${s.scout.ready ? esc(`${s.scout.model} on ${s.scout.device}`) : 'plain rules in use'}</span></div>
+      <div class="tile"><span class="meta">Alfred</span><b style="font-size:22px">${s.alfred.ready ? 'Ready' : s.alfred.enabled ? 'Not running' : 'Off'}</b><span class="meta">${s.alfred.ready ? esc(`${s.alfred.model} on ${s.alfred.device}`) : 'plain rules in use'}</span></div>
     </div>
     <section class="panel2" aria-label="Latency"><h3>Latency</h3>
       ${lat.length ? `<table class="lat"><thead><tr><th>Where</th><th>Count</th><th>p50 ms</th><th>p95 ms</th><th class="barcell"></th></tr></thead><tbody>
@@ -203,7 +203,7 @@ function renderStats(){
       <p class="meta" style="margin-top:8px">Grey: injected. Clay: saved.</p>` : '<p class="empty">No data yet.</p>'}
     </section>
     <section class="panel2" aria-label="Activity"><h3>Activity</h3>
-      <p>${n(c.claims)} claims · ${n(c.guard_checks)} guard checks (${n(c.guard_conflicts)} conflicts) · ${n(c.requests)} requests · ${n(c.handoffs)} handoffs · ${n(c.decisions)} decisions · ${n(c.scout_rank)} rankings · ${n(c.scout_classify)} messages classified</p>
+      <p>${n(c.claims)} claims · ${n(c.guard_checks)} guard checks (${n(c.guard_conflicts)} conflicts) · ${n(c.requests)} requests · ${n(c.handoffs)} handoffs · ${n(c.decisions)} decisions · ${n(c.alfred_rank)} rankings · ${n(c.alfred_classify)} messages classified</p>
     </section>`;
 }
 

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Batcave Scout: a local HTTP sidecar around the Julia-1 decision model.
+"""Batcave Alfred: a local HTTP sidecar around the Julia-1 decision model.
 
 Julia-1 (Supersonic Labs, Apache-2.0) picks among supplied answers instead of
 generating text, and runs on CPU. Batcave uses it for bounded, advisory calls:
 ranking which team notes are relevant to a prompt, and spotting decisions in chat.
 
-    python batcave_scout.py --model ~/.batcave/scout/Julia-1 [--port 4778] [--device cpu]
+    python batcave_alfred.py --model ~/.batcave/alfred/Julia-1 [--port 4778] [--device cpu]
 
 Endpoints
     GET  /health  -> {"ok": true, "loaded": true, "model": "Julia-1", "device": "cpu", "load_ms": 2140}
@@ -40,10 +40,10 @@ def load(model_path, device, max_length):
         # warm up once so the first real request is fast
         engine.predict(state="warm up", questions={"w": {"type": "noul", "instructions": "Is this a warm up?"}})
         STATE.update(engine=engine, loaded=True, load_ms=round((time.perf_counter() - t0) * 1000))
-        print(f"[batcave-scout] loaded {model_path} on {device} in {STATE['load_ms']} ms", flush=True)
+        print(f"[batcave-alfred] loaded {model_path} on {device} in {STATE['load_ms']} ms", flush=True)
     except Exception as e:  # keep serving /health with the error so Batcave can fall back
         STATE.update(error=f"{type(e).__name__}: {e}")
-        print(f"[batcave-scout] failed to load model: {STATE['error']}", file=sys.stderr, flush=True)
+        print(f"[batcave-alfred] failed to load model: {STATE['error']}", file=sys.stderr, flush=True)
 
 
 def to_plain(x):
@@ -68,7 +68,7 @@ def pct(values, p):
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # quiet by default
-        if os.environ.get("BATCAVE_SCOUT_DEBUG"):
+        if os.environ.get("BATCAVE_ALFRED_DEBUG"):
             super().log_message(fmt, *args)
 
     def send(self, code, body):
@@ -114,16 +114,16 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Batcave Scout: Julia-1 decision model sidecar")
-    ap.add_argument("--model", default=os.path.expanduser("~/.batcave/scout/Julia-1"))
+    ap = argparse.ArgumentParser(description="Batcave Alfred: Julia-1 decision model sidecar")
+    ap.add_argument("--model", default=os.path.expanduser("~/.batcave/alfred/Julia-1"))
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=4778)
-    ap.add_argument("--device", default=os.environ.get("BATCAVE_SCOUT_DEVICE", "cpu"))
+    ap.add_argument("--device", default=os.environ.get("BATCAVE_ALFRED_DEVICE", "cpu"))
     ap.add_argument("--max-length", type=int, default=1024)
     a = ap.parse_args()
     STATE.update(model=os.path.basename(a.model.rstrip("/")), device=a.device)
     threading.Thread(target=load, args=(a.model, a.device, a.max_length), daemon=True).start()
-    print(f"[batcave-scout] listening on http://{a.host}:{a.port} (loading model...)", flush=True)
+    print(f"[batcave-alfred] listening on http://{a.host}:{a.port} (loading model...)", flush=True)
     ThreadingHTTPServer((a.host, a.port), Handler).serve_forever()
 
 

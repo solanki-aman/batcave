@@ -145,7 +145,7 @@ batcave/
 └── assets/                      # the images in this README
 ```
 
-## Scout
+## Alfred
 
 Batcave can use [Julia-1](https://huggingface.co/SupersonicLabs/Julia-1), an open decision model from Supersonic Labs, for small advisory calls. Julia-1 takes a state, a question and a closed set of answers, and returns a choice or a probability. It does not generate text.
 
@@ -159,17 +159,17 @@ Batcave can use [Julia-1](https://huggingface.co/SupersonicLabs/Julia-1), an ope
 ### Running it
 
 ```bash
-batcave scout install                 # Python 3.9+, creates ~/.batcave/scout/venv, downloads the model
-batcave scout start                   # foreground, http://127.0.0.1:4778
-batcave scout start --detach          # background, log in ~/.batcave/scout/scout.log
-batcave scout start --device mps      # Apple silicon GPU, or cuda
-batcave scout status
-batcave server --scout                # server and scout together
+batcave alfred install                 # Python 3.9+, creates ~/.batcave/alfred/venv, downloads the model
+batcave alfred start                   # foreground, http://127.0.0.1:4778
+batcave alfred start --detach          # background, log in ~/.batcave/alfred/alfred.log
+batcave alfred start --device mps      # Apple silicon GPU, or cuda
+batcave alfred status
+batcave server --alfred                # server and alfred together
 ```
 
-Or with Docker, next to the server: `docker build -t batcave-scout scout && docker run -d -p 4778:4778 batcave-scout`.
+Or with Docker, next to the server: `docker build -t batcave-alfred alfred && docker run -d -p 4778:4778 batcave-alfred`.
 
-The server looks for Scout at `BATCAVE_SCOUT_URL` (default `http://127.0.0.1:4778`) every 30 seconds. Set `BATCAVE_SCOUT=off` to disable it, and `BATCAVE_SCOUT_TIMEOUT_MS` (default 900) to change the per-call budget.
+The server looks for Alfred at `BATCAVE_ALFRED_URL` (default `http://127.0.0.1:4778`) every 30 seconds. Set `BATCAVE_ALFRED=off` to disable it, and `BATCAVE_ALFRED_TIMEOUT_MS` (default 900) to change the per-call budget.
 
 ### Sidecar API
 
@@ -184,9 +184,9 @@ The server looks for Scout at `BATCAVE_SCOUT_URL` (default `http://127.0.0.1:477
 `GET /api/stats` returns, since the server first started:
 
 - `tokens`: `injected`, `savedDedupe`, `savedRanking`, `saved`, `savedPct`. Tokens are estimated as characters divided by four.
-- `latency`: per key, `count`, `avg`, `p50`, `p95` over the last 400 samples. Keys are `api:<METHOD> <route>` (server time), `hook:<mode>` and `agent:<agent>` (end-to-end hook time reported by each client with its next request), and `scout:<call>`.
-- `counters`: claims, guard checks and conflicts, requests, handoffs, decisions, messages by kind, scout calls and failures.
+- `latency`: per key, `count`, `avg`, `p50`, `p95` over the last 400 samples. Keys are `api:<METHOD> <route>` (server time), `hook:<mode>` and `agent:<agent>` (end-to-end hook time reported by each client with its next request), and `alfred:<call>`.
+- `counters`: claims, guard checks and conflicts, requests, handoffs, decisions, messages by kind, alfred calls and failures.
 - `daily`: injected and saved tokens per day for the last 30 days.
-- `scout`: whether Scout is enabled and ready, and which model and device it uses.
+- `alfred`: whether Alfred is enabled and ready, and which model and device it uses.
 
 The same numbers appear in the dashboard's Stats tab, in `batcave stats`, and as "tok saved" in the status line.

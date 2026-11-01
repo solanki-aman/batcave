@@ -9,7 +9,7 @@
   "files": [
     "cli",
     "plugin",
-    "scout",
+    "alfred",
     "server/src",
     "server/public",
     "server/package.json"

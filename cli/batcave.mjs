@@ -55,11 +55,11 @@ async function run(name, args) {
 }
 
 
-// ---------- scout (local Julia-1 decision model) ----------
-const SCOUT_DIR = path.join(HOME_DIR, 'scout');
-const SCOUT_VENV = path.join(SCOUT_DIR, 'venv');
-const SCOUT_MODEL = path.join(SCOUT_DIR, 'Julia-1');
-const venvPy = () => path.join(SCOUT_VENV, process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
+// ---------- alfred (local Julia-1 decision model) ----------
+const ALFRED_DIR = path.join(HOME_DIR, 'alfred');
+const ALFRED_VENV = path.join(ALFRED_DIR, 'venv');
+const ALFRED_MODEL = path.join(ALFRED_DIR, 'Julia-1');
+const venvPy = () => path.join(ALFRED_VENV, process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
 
 function sh(cmd, args, opts = {}) {
   out(`  $ ${[cmd, ...args].join(' ')}`);
@@ -72,53 +72,53 @@ function findPython() {
     const r = spawnSync(c, ['-c', 'import sys;print(sys.version_info[:2] >= (3,9))'], { encoding: 'utf8' });
     if (r.status === 0 && r.stdout.trim() === 'True') return c;
   }
-  die('Python 3.9+ is required for Scout. Install it and re-run.');
+  die('Python 3.9+ is required for Alfred. Install it and re-run.');
 }
 
-function scoutInstall() {
+function alfredInstall() {
   const py = findPython();
-  fs.mkdirSync(SCOUT_DIR, { recursive: true });
-  out('Setting up the Batcave scout (Julia-1, Apache-2.0, ~580 MB) in ' + SCOUT_DIR);
-  if (!fs.existsSync(venvPy())) sh(py, ['-m', 'venv', SCOUT_VENV]);
+  fs.mkdirSync(ALFRED_DIR, { recursive: true });
+  out('Setting up the Batcave alfred (Julia-1, Apache-2.0, ~580 MB) in ' + ALFRED_DIR);
+  if (!fs.existsSync(venvPy())) sh(py, ['-m', 'venv', ALFRED_VENV]);
   sh(venvPy(), ['-m', 'pip', 'install', '--quiet', '--upgrade', 'pip', 'huggingface_hub']);
   if (process.platform === 'linux' && !flags['keep-torch']) {
     sh(venvPy(), ['-m', 'pip', 'install', '--quiet', 'torch', '--index-url', 'https://download.pytorch.org/whl/cpu']);
   }
-  sh(venvPy(), ['-c', `from huggingface_hub import snapshot_download; snapshot_download('${flags.repo || 'SupersonicLabs/Julia-1'}', local_dir=${JSON.stringify(SCOUT_MODEL)})`]);
-  if (fs.existsSync(path.join(SCOUT_MODEL, 'pyproject.toml')) || fs.existsSync(path.join(SCOUT_MODEL, 'setup.py'))) {
-    sh(venvPy(), ['-m', 'pip', 'install', '--quiet', '-e', SCOUT_MODEL]);
-  } else if (fs.existsSync(path.join(SCOUT_MODEL, 'requirements.txt'))) {
-    sh(venvPy(), ['-m', 'pip', 'install', '--quiet', '-r', path.join(SCOUT_MODEL, 'requirements.txt')]);
+  sh(venvPy(), ['-c', `from huggingface_hub import snapshot_download; snapshot_download('${flags.repo || 'SupersonicLabs/Julia-1'}', local_dir=${JSON.stringify(ALFRED_MODEL)})`]);
+  if (fs.existsSync(path.join(ALFRED_MODEL, 'pyproject.toml')) || fs.existsSync(path.join(ALFRED_MODEL, 'setup.py'))) {
+    sh(venvPy(), ['-m', 'pip', 'install', '--quiet', '-e', ALFRED_MODEL]);
+  } else if (fs.existsSync(path.join(ALFRED_MODEL, 'requirements.txt'))) {
+    sh(venvPy(), ['-m', 'pip', 'install', '--quiet', '-r', path.join(ALFRED_MODEL, 'requirements.txt')]);
   }
-  fs.copyFileSync(path.join(ROOT, 'scout', 'batcave_scout.py'), path.join(SCOUT_DIR, 'batcave_scout.py'));
-  out('\n✓ Scout installed. Start it next to your Batcave server with: batcave scout start');
+  fs.copyFileSync(path.join(ROOT, 'alfred', 'batcave_alfred.py'), path.join(ALFRED_DIR, 'batcave_alfred.py'));
+  out('\n✓ Alfred installed. Start it next to your Batcave server with: batcave alfred start');
 }
 
-function scoutArgs() {
-  return [path.join(SCOUT_DIR, 'batcave_scout.py'), '--model', SCOUT_MODEL, '--port', String(flags['scout-port'] || flags.port || 4778), '--device', String(flags.device || 'cpu')];
+function alfredArgs() {
+  return [path.join(ALFRED_DIR, 'batcave_alfred.py'), '--model', ALFRED_MODEL, '--port', String(flags['alfred-port'] || flags.port || 4778), '--device', String(flags.device || 'cpu')];
 }
 
-function scoutStart(detach) {
-  if (!fs.existsSync(venvPy()) || !fs.existsSync(SCOUT_MODEL)) die('Scout not installed. Run: batcave scout install');
-  fs.copyFileSync(path.join(ROOT, 'scout', 'batcave_scout.py'), path.join(SCOUT_DIR, 'batcave_scout.py'));
-  if (!detach) return spawnSync(venvPy(), scoutArgs(), { stdio: 'inherit' });
-  const log = fs.openSync(path.join(SCOUT_DIR, 'scout.log'), 'a');
-  const child = spawn(venvPy(), scoutArgs(), { detached: true, stdio: ['ignore', log, log] });
-  fs.writeFileSync(path.join(SCOUT_DIR, 'scout.pid'), String(child.pid));
+function alfredStart(detach) {
+  if (!fs.existsSync(venvPy()) || !fs.existsSync(ALFRED_MODEL)) die('Alfred not installed. Run: batcave alfred install');
+  fs.copyFileSync(path.join(ROOT, 'alfred', 'batcave_alfred.py'), path.join(ALFRED_DIR, 'batcave_alfred.py'));
+  if (!detach) return spawnSync(venvPy(), alfredArgs(), { stdio: 'inherit' });
+  const log = fs.openSync(path.join(ALFRED_DIR, 'alfred.log'), 'a');
+  const child = spawn(venvPy(), alfredArgs(), { detached: true, stdio: ['ignore', log, log] });
+  fs.writeFileSync(path.join(ALFRED_DIR, 'alfred.pid'), String(child.pid));
   child.unref();
-  out(`✓ Scout starting in the background (pid ${child.pid}). Log: ${path.join(SCOUT_DIR, 'scout.log')}`);
+  out(`✓ Alfred starting in the background (pid ${child.pid}). Log: ${path.join(ALFRED_DIR, 'alfred.log')}`);
   return child;
 }
 
-async function scoutStatus() {
-  const url = (process.env.BATCAVE_SCOUT_URL || `http://127.0.0.1:${flags.port || 4778}`).replace(/\/+$/, '');
+async function alfredStatus() {
+  const url = (process.env.BATCAVE_ALFRED_URL || `http://127.0.0.1:${flags.port || 4778}`).replace(/\/+$/, '');
   try {
     const h = await fetch(url + '/health', { signal: AbortSignal.timeout(2000) }).then((r) => r.json());
     const s = await fetch(url + '/stats', { signal: AbortSignal.timeout(2000) }).then((r) => r.json()).catch(() => ({}));
-    out(`${h.loaded ? '✓' : '…'} Scout at ${url}: ${h.loaded ? 'ready' : h.error ? 'error' : 'loading'} · model ${h.model} on ${h.device}${h.load_ms ? ` · loaded in ${h.load_ms} ms` : ''}`);
+    out(`${h.loaded ? '✓' : '…'} Alfred at ${url}: ${h.loaded ? 'ready' : h.error ? 'error' : 'loading'} · model ${h.model} on ${h.device}${h.load_ms ? ` · loaded in ${h.load_ms} ms` : ''}`);
     if (h.error) out(`  ${h.error}`);
     if (s.calls) out(`  ${s.calls} decisions · p50 ${s.p50_ms} ms · p95 ${s.p95_ms} ms`);
-  } catch { out(`○ No scout running at ${url}. Start it with: batcave scout start`); }
+  } catch { out(`○ No alfred running at ${url}. Start it with: batcave alfred start`); }
 }
 
 async function printStats() {
@@ -130,10 +130,10 @@ async function printStats() {
   out('Tokens');
   out(`  injected into agents      ${n(t.injected)}`);
   out(`  saved by dedupe           ${n(t.savedDedupe)}`);
-  out(`  saved by ranking (scout)  ${n(t.savedRanking)}`);
+  out(`  saved by ranking (Alfred)  ${n(t.savedRanking)}`);
   out(`  saved overall             ${n(t.saved)}  (${t.savedPct}%)`);
-  out(`\nScout  ${s.scout.ready ? `ready · ${s.scout.model} on ${s.scout.device}` : s.scout.enabled ? 'not running (plain rules in use)' : 'off'}`);
-  const rows = Object.entries(s.latency).filter(([k]) => /^(hook|scout|api:GET \/api\/(context|guard)|agent)/.test(k)).sort();
+  out(`\nAlfred  ${s.alfred.ready ? `ready · ${s.alfred.model} on ${s.alfred.device}` : s.alfred.enabled ? 'not running (plain rules in use)' : 'off'}`);
+  const rows = Object.entries(s.latency).filter(([k]) => /^(hook|alfred|api:GET \/api\/(context|guard)|agent)/.test(k)).sort();
   if (rows.length) {
     out('\nLatency (ms)                         count     p50     p95');
     for (const [k, v] of rows) out(`  ${k.padEnd(34)} ${String(v.count).padStart(6)} ${String(v.p50 ?? '-').padStart(7)} ${String(v.p95 ?? '-').padStart(7)}`);
@@ -153,15 +153,15 @@ Setup
   batcave uninstall [--agent ...]    Remove Batcave from agents (backups are kept)
   batcave agents                     Show supported agents and which are installed here
   batcave doctor                     Check config and server
-  batcave server [--port 4777] [--scout]
+  batcave server [--port 4777] [--alfred]
                                      Run a Batcave server (needs BATCAVE_TEAM_TOKEN);
-                                     --scout also starts the local decision model
+                                     --alfred also starts the local decision model
   batcave stats                      Team latency and token savings
 
-Scout (optional local decision model, Julia-1)
-  batcave scout install              Download Julia-1 from Hugging Face into ~/.batcave/scout
-  batcave scout start [--detach] [--device cpu|mps|cuda]
-  batcave scout status
+Alfred (optional local decision model, Julia-1)
+  batcave alfred install              Download Julia-1 from Hugging Face into ~/.batcave/alfred
+  batcave alfred start [--detach] [--device cpu|mps|cuda]
+  batcave alfred status
 
 Team (works from any shell, no agent needed)
   batcave board [--mine]             batcave people
@@ -235,19 +235,19 @@ switch (cmd) {
     process.exit(r.status || 0);
   }
 
-  case 'scout': {
+  case 'alfred': {
     const sub = rest[0];
-    if (sub === 'install') scoutInstall();
-    else if (sub === 'start') scoutStart(Boolean(flags.detach));
-    else if (sub === 'status') await scoutStatus();
-    else die('Usage: batcave scout <install|start|status>');
+    if (sub === 'install') alfredInstall();
+    else if (sub === 'start') alfredStart(Boolean(flags.detach));
+    else if (sub === 'status') await alfredStatus();
+    else die('Usage: batcave alfred <install|start|status>');
     break;
   }
 
   case 'stats': await printStats(); break;
 
   case 'server': {
-    if (flags.scout) scoutStart(true);
+    if (flags.alfred) alfredStart(true);
     const env = { ...process.env, ...(flags.port ? { PORT: String(flags.port) } : {}) };
     spawnSync(process.execPath, [path.join(ROOT, 'server', 'src', 'index.mjs')], { stdio: 'inherit', env });
     break;
