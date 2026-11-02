@@ -1,13 +1,17 @@
 {
   "name": "batcave",
-  "owner": { "name": "Aman Solanki" },
-  "metadata": { "description": "Batcave: multiplayer coding agents for teams." },
+  "owner": {
+    "name": "Aman Solanki"
+  },
+  "metadata": {
+    "description": "Batcave: multiplayer coding agents for teams."
+  },
   "plugins": [
     {
       "name": "batcave",
       "source": "./plugin",
-      "description": "Shared board with claims, people and presence, rooms, decisions, requests, handoffs and an edit guard for teams using Claude Code.",
-      "version": "0.2.0"
+      "description": "Claude Code mod and plugin for Batcave: live team band, /cave pane, guard pane, plus shared hooks, MCP tools and commands.",
+      "version": "0.3.0"
     }
   ]
 }

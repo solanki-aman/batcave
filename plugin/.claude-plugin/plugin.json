@@ -1,8 +1,17 @@
 {
   "name": "batcave",
-  "version": "0.2.0",
-  "description": "Multiplayer coding agents. A shared board with claims, people and presence, rooms, pinned decisions, requests between teammates' Claudes, handoffs, and an edit guard. Everyone runs their own agent; teammates can use Codex, Gemini CLI, Cursor, Copilot CLI or OpenCode via the batcave CLI.",
-  "author": { "name": "Aman Solanki" },
+  "version": "0.3.0",
+  "description": "Multiplayer coding agents, as a Claude Code mod: a live team band above the prompt, a /cave pane with the board, team, requests and stats, and a guard pane that holds edits to files a teammate's agent just changed. Plus slash commands, MCP tools and hooks shared with Codex, Gemini CLI, Cursor, Copilot CLI and OpenCode.",
+  "author": {
+    "name": "Aman Solanki"
+  },
   "license": "MIT",
-  "keywords": ["collaboration", "team", "kanban", "multiplayer", "presence", "handoff"]
+  "keywords": [
+    "collaboration",
+    "team",
+    "kanban",
+    "multiplayer",
+    "presence",
+    "handoff"
+  ]
 }

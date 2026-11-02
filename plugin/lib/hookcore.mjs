@@ -51,6 +51,11 @@ export function saveTiming(agent, mode, ms) {
 
 const ctxQuery = (ev, force) => `/api/context?session=${encodeURIComponent(`${ev.agent}:${ev.sessionId}`)}${ev.prompt ? `&prompt=${encodeURIComponent(String(ev.prompt).slice(0, 600))}` : ''}${force ? '&force=1' : ''}`;
 
+// The Claude Code mod refreshes this marker every 15 s while it runs.
+function modActive() {
+  try { return Date.now() / 1000 - Number(fs.readFileSync(path.join(HOME_DIR, 'mod-active'), 'utf8')) < 60; } catch { return false; }
+}
+
 export async function handle(ev, { canAsk = true } = {}) {
   const cfg = loadConfig(ev.cwd || process.cwd());
   if (!cfg.ready) return { silent: true };
@@ -80,6 +85,7 @@ export async function handle(ev, { canAsk = true } = {}) {
 
     case 'pre-tool': {
       if (ev.tool !== 'edit' || !ev.files.length) return {};
+      if (ev.agent === 'claude' && modActive()) return {}; // the Batcave mod holds the edit in a pane instead
       const files = ev.files.map((f) => relPath(f, cfg.root));
       const g = await api(cfg, 'GET', `/api/guard?files=${encodeURIComponent(files.join(','))}&minutes=${cfg.guardMinutes}`);
       if (!g.conflict) return {};

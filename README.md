@@ -37,7 +37,7 @@ Everyone keeps their own agent, their own machine and their own account. Batcave
 
 | Agent | Install | Team context | Activity | Guard |
 |---|---|---|:---:|---|
-| Claude Code | plugin | session start, every prompt | ✓ | asks |
+| Claude Code | plugin with a mod | session start, every prompt | ✓ | holds the edit in a pane |
 | Codex CLI | `batcave init` | session start, every prompt | ✓ | asks |
 | Gemini CLI, Antigravity | `batcave init` | session start, every prompt | ✓ | blocks once |
 | Cursor | `batcave init` | session start, after tool calls | ✓ | blocks once |
@@ -46,6 +46,21 @@ Everyone keeps their own agent, their own machine and their own account. Batcave
 | Any MCP client | manual | `AGENTS.md` | tools only | no |
 
 *Blocks once* is for agents whose hooks cannot pause for a question: Batcave stops the first edit, the agent explains why, and the retry goes through if you approve.
+
+## Inside Claude Code
+
+In Claude Code, Batcave is a mod. It draws the team above your prompt and holds risky edits in a pane:
+
+```text
+◆ wayne-tech · 5 online · 1 request · T-9 running · Tim: editing tokens.ts · 12.4k tok saved   [Board b] [Team t] [Requests q]
+```
+
+- **Team band**, live above the prompt: who is online, what teammates' agents are doing, requests for you, your claim, tokens saved.
+- **`/cave` pane** with Board (claim with one key), Team, Requests (Run on my agent, Decline) and Stats tabs.
+- **Guard pane**: an edit to a file a teammate's agent just changed waits for Proceed or Cancel.
+- **Toasts** for new requests, handoffs and decisions.
+
+Details in the [plugin README](plugin/README.md).
 
 ## Quick start
 
@@ -110,6 +125,7 @@ batcave decide "Reuse surface tokens. No new colors."
 <p align="center"><img src="docs/assets/architecture.svg" alt="Each teammate's agent exchanges state with one Batcave server, which also serves the dashboard" width="100%"></p>
 
 - **Server.** One per team. Holds people, tasks, rooms, decisions, requests, handoffs and recent file edits. JSON API, live event stream and dashboard. Zero dependencies.
+- **Claude Code mod.** A hooks module that draws the team band, the `/cave` pane and the guard pane inside Claude Code.
 - **Hooks.** One script serves every agent; small adapters translate each vendor's payloads. They report presence and activity and push team context into the agent. Every hook fails open with a short timeout.
 - **MCP server.** Eighteen tools (`batcave_board`, `batcave_claim`, `batcave_request`, ...) so any agent can read and change shared state.
 - **CLI.** `batcave init` wires agents up; `batcave board`, `people`, `claim`, `say` and more work from any shell.
