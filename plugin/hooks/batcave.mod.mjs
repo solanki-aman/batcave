@@ -702,7 +702,7 @@ function statsTab(t, width) {
     Text({ key: "sp2", children: " " }),
     rule(Text, "h3", "ALFRED", undefined, width),
     Text({ key: "alfred", children: s.alfred?.ready
-      ? [Text({ key: "a", color: C.ok, children: "   ● " }), Text({ key: "b", color: C.mut, children: `${s.alfred.model} on ${s.alfred.device}` })]
+      ? [Text({ key: "a", color: C.ok, children: "   ● " }), Text({ key: "b", color: C.mut, children: `${s.alfred.model} on ${s.alfred.device}${s.alfred.embeddings ? ` · shortlist ${s.alfred.embedModel}` : ""}` })]
       : [Text({ key: "a", color: C.dim, children: "   ○ " }), Text({ key: "b", color: C.dim, children: "not running · plain rules in use" })] }),
   ];
   const q = Object.entries(s.alfred?.quality ?? {}).filter(([, v]) => v.withOutcome > 0).slice(0, 4);

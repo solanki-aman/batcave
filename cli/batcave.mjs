@@ -59,6 +59,7 @@ async function run(name, args) {
 const ALFRED_DIR = path.join(HOME_DIR, 'alfred');
 const ALFRED_VENV = path.join(ALFRED_DIR, 'venv');
 const ALFRED_MODEL = path.join(ALFRED_DIR, 'Julia-1');
+const EMBED_MODEL = path.join(ALFRED_DIR, 'embeddinggemma-2');
 const venvPy = () => path.join(ALFRED_VENV, process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
 
 function sh(cmd, args, opts = {}) {
@@ -90,12 +91,18 @@ function alfredInstall() {
   } else if (fs.existsSync(path.join(ALFRED_MODEL, 'requirements.txt'))) {
     sh(venvPy(), ['-m', 'pip', 'install', '--quiet', '-r', path.join(ALFRED_MODEL, 'requirements.txt')]);
   }
+  if (!flags['no-embed']) {
+    out('Adding the embedding model (EmbeddingGemma 2, Apache-2.0) for shortlisting. Skip with --no-embed.');
+    sh(venvPy(), ['-m', 'pip', 'install', '--quiet', '-U', 'sentence-transformers', 'transformers']);
+    sh(venvPy(), ['-c', `from huggingface_hub import snapshot_download; snapshot_download('${flags['embed-repo'] || 'google/embeddinggemma-2'}', local_dir=${JSON.stringify(EMBED_MODEL)})`]);
+  }
   fs.copyFileSync(path.join(ROOT, 'alfred', 'batcave_alfred.py'), path.join(ALFRED_DIR, 'batcave_alfred.py'));
   out('\n✓ Alfred installed. Start it next to your Batcave server with: batcave alfred start');
 }
 
 function alfredArgs() {
-  return [path.join(ALFRED_DIR, 'batcave_alfred.py'), '--model', ALFRED_MODEL, '--port', String(flags['alfred-port'] || flags.port || 4778), '--device', String(flags.device || 'cpu')];
+  const embed = fs.existsSync(EMBED_MODEL) && !flags['no-embed'] ? ['--embed', EMBED_MODEL] : [];
+  return [path.join(ALFRED_DIR, 'batcave_alfred.py'), '--model', ALFRED_MODEL, ...embed, '--port', String(flags['alfred-port'] || flags.port || 4778), '--device', String(flags.device || 'cpu')];
 }
 
 function alfredStart(detach) {
@@ -160,7 +167,7 @@ async function printStats() {
   out(`  saved by dedupe           ${n(t.savedDedupe)}`);
   out(`  saved by ranking (Alfred)  ${n(t.savedRanking)}`);
   out(`  saved overall             ${n(t.saved)}  (${t.savedPct}%)`);
-  out(`\nAlfred  ${s.alfred.ready ? `ready · ${s.alfred.model} on ${s.alfred.device}` : s.alfred.enabled ? 'not running (plain rules in use)' : 'off'}`);
+  out(`\nAlfred  ${s.alfred.ready ? `ready · ${s.alfred.model} on ${s.alfred.device}${s.alfred.embeddings ? ` · shortlisting with ${s.alfred.embedModel}` : ''}` : s.alfred.enabled ? 'not running (plain rules in use)' : 'off'}`);
   const rows = Object.entries(s.latency).filter(([k]) => /^(hook|alfred|api:GET \/api\/(context|guard)|agent)/.test(k)).sort();
   if (rows.length) {
     out('\nLatency (ms)                         count     p50     p95');

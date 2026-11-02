@@ -69,6 +69,15 @@ export class Assist {
     return out;
   }
 
+  // Shortlist: with embeddings available, keep only the k candidates closest
+  // in meaning to the query, so Julia-1 decides among a few. Otherwise fall back
+  // to the first `cap` candidates, as before.
+  async narrow(query, items, k, cap, textOf, label) {
+    if (items.length <= k) return { items, embedded: false };
+    const sl = this.embed ? await this.embed.shortlist(query, items, k, textOf, label) : null;
+    return sl ? { items: sl.map((x) => x.item), embedded: true, sims: sl.map((x) => x.sim) } : { items: items.slice(0, cap), embedded: false };
+  }
+
   async choose(state, instructions, options, label) {
     const criteria = Object.fromEntries(options.map((o) => [o.key, o.desc.slice(0, 200)]));
     const answers = await this.alfred.decide(state, { pick: { type: 'choice', instructions, criteria } }, label);
@@ -84,8 +93,9 @@ export class Assist {
   // ---- 1. match a prompt to a backlog card --------------------------------
 
   async matchTask(prompt, tasks) {
-    const cands = tasks.slice(0, 15);
-    if (!prompt || !cands.length) return null;
+    if (!prompt || !tasks.length) return null;
+    const n = await this.narrow(prompt, tasks, 6, 15, (t) => `${t.title}. ${t.description || ''}`, 'match');
+    const cands = n.items;
     let pick = null, source = 'rules', p = null;
     const top = await this.choose(`Request: ${prompt.slice(0, 600)}`, 'Which backlog task is this request working on?',
       [...cands.map((t) => ({ key: t.id, desc: t.title + (t.description ? `. ${t.description}` : '') })), { key: 'none', desc: 'None of these; unrelated work' }], 'match');
@@ -94,6 +104,7 @@ export class Assist {
       const scored = cands.map((t) => ({ t, s: overlap(prompt, `${t.title} ${t.description || ''}`) })).sort((a, b) => b.s - a.s)[0];
       if (scored && scored.s >= 0.5) { pick = scored.t; p = scored.s; }
     }
+    if (n.embedded) source = `embed+${source}`;
     const id = this.log('match', { prompt: prompt.slice(0, 300), candidates: cands.map((t) => t.id) }, pick?.id ?? 'none', source, p);
     return pick ? { task: pick, p, source, decisionId: id } : null;
   }
@@ -101,8 +112,9 @@ export class Assist {
   // ---- 2. duplicate cards -------------------------------------------------
 
   async duplicateOf(title, description, tasks) {
-    const cands = tasks.slice(0, 20);
-    if (!cands.length) return null;
+    if (!tasks.length) return null;
+    const n = await this.narrow(`${title}. ${description || ''}`, tasks, 5, 20, (t) => `${t.title}. ${t.description || ''}`, 'duplicate');
+    const cands = n.items;
     let hit = null, source = 'rules', p = null;
     const ps = await this.yesno(`New task: ${title}. ${description || ''}`.slice(0, 800),
       cands.map((t) => `Is the new task the same piece of work as this existing task: ${t.title}?`), 'duplicate');
@@ -114,6 +126,7 @@ export class Assist {
       const best = cands.map((t) => ({ t, s: overlap(title, t.title) })).sort((a, b) => b.s - a.s)[0];
       if (best && best.s >= 0.75) { hit = best.t; p = best.s; }
     }
+    if (n.embedded) source = `embed+${source}`;
     const id = this.log('duplicate', { title: title.slice(0, 200), candidates: cands.map((t) => t.id) }, hit?.id ?? 'none', source, p);
     return hit ? { task: hit, p, source, decisionId: id } : null;
   }
@@ -196,8 +209,10 @@ export class Assist {
   // ---- 4. route a request to the right teammate --------------------------------
 
   async route(text, people) {
-    const cands = people.slice(0, 15);
-    if (!cands.length) return null;
+    if (!people.length) return null;
+    // profiles include each person's recent changes, so code questions find the code's owner
+    const n = await this.narrow(text, people, 4, 15, (x) => x.profile, 'route');
+    const cands = n.items;
     let pick = null, source = 'rules', p = null;
     const top = await this.choose(`Request: ${text.slice(0, 500)}`, 'Which teammate is best placed to handle this request?',
       cands.map((x) => ({ key: x.id, desc: x.profile })), 'route');
@@ -206,6 +221,7 @@ export class Assist {
       const best = cands.map((x) => ({ x, s: overlap(text, x.profile) })).sort((a, b) => b.s - a.s)[0];
       pick = best?.s > 0 ? best.x : null; p = best?.s ?? null; source = top ? 'alfred+rules' : 'rules';
     }
+    if (n.embedded) source = `embed+${source}`;
     const id = this.log('route', { text: text.slice(0, 200), candidates: cands.map((x) => x.id) }, pick?.id ?? 'none', source, p);
     return pick ? { person: pick, p, source, decisionId: id } : null;
   }
@@ -217,8 +233,9 @@ export class Assist {
     if (byBranch) return { task: byBranch, source: 'branch' };
     if (!tasks.length) return null;
     let pick = null, source = 'rules', p = null;
+    const n = await this.narrow(subject, tasks, 6, 12, (t) => t.title, 'commit');
     const top = await this.choose(`Commit: ${subject}${branch ? ` (branch ${branch})` : ''}`, 'Which task does this commit belong to?',
-      [...tasks.slice(0, 12).map((t) => ({ key: t.id, desc: t.title })), { key: 'none', desc: 'None of these' }], 'commit');
+      [...n.items.map((t) => ({ key: t.id, desc: t.title })), { key: 'none', desc: 'None of these' }], 'commit');
     if (top) { source = 'alfred'; p = top.p; pick = top.choice !== 'none' && (Number.isNaN(top.p) || top.p >= 0.5) ? tasks.find((t) => t.id === top.choice) : null; }
     else {
       const best = tasks.map((t) => ({ t, s: overlap(subject, t.title) })).sort((a, b) => b.s - a.s)[0];

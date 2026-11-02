@@ -207,6 +207,20 @@ The agent receives a brief with the room's thread, its task and the pinned decis
 
 **Auto weigh-in** is a per-person opt-in (`batcave auto-weigh-in on`, the Team tab in `/cave`, or the People view in the dashboard). With it on, Alfred's offers to you run on your agent without a key press, every time. In Claude Code the mod never cuts into a running turn: it waits for the current one to finish. Other agents pick it up at the next prompt.
 
+### Embeddings
+
+With `--embed` (installed by default), the Alfred sidecar also loads EmbeddingGemma 2 and serves `POST /embed {"texts", "kind": "query"|"document", "dims"}`. The server uses it to shortlist before Julia-1 decides:
+
+| Call | Searches | Julia-1 then judges |
+|---|---|---|
+| Context ranking | every active decision and up to 400 messages of the room | the closest 12 |
+| Card matching | the whole backlog | the closest 6 |
+| Duplicates | every open card | the closest 5 |
+| Request routing | every teammate's profile, including their recent code | the closest 4 |
+| Commit linking | your open cards | the closest 6 |
+
+Vectors are cached by text and truncated to `BATCAVE_EMBED_DIMS` (256, Matryoshka). `BATCAVE_EMBED=off` turns shortlisting off; `BATCAVE_EMBED_TIMEOUT_MS` (1500) bounds each call. The outcome log marks shortlisted judgments with the source `embed+alfred`, so their acceptance rate can be compared with the old path.
+
 ### Outcome log
 
 Each judgment is logged with its input, answer, source (`alfred` or `rules`) and confidence, in the store and in `alfred-decisions.jsonl` next to the data file. Outcomes are attached when they happen: a suggested card claimed or not, a routed request accepted or declined, a suggested pin pinned, a guard Proceed or Cancel, a paused owner returning. `GET /api/stats` reports the acceptance rate per call under `alfred.quality`, and `GET /api/alfred/log` returns recent entries. This is the data you would fine-tune Julia-1 on later.

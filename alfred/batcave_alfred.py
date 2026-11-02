@@ -5,11 +5,15 @@ Julia-1 (Supersonic Labs, Apache-2.0) picks among supplied answers instead of
 generating text, and runs on CPU. Batcave uses it for bounded, advisory calls:
 ranking which team notes are relevant to a prompt, and spotting decisions in chat.
 
-    python batcave_alfred.py --model ~/.batcave/alfred/Julia-1 [--port 4778] [--device cpu]
+    python batcave_alfred.py --model ~/.batcave/alfred/Julia-1 [--embed ~/.batcave/alfred/embeddinggemma-2] [--port 4778] [--device cpu]
+
+With --embed, Alfred also loads an embedding model (EmbeddingGemma 2 by default)
+and shortlists candidates by similarity before Julia-1 decides among a few.
 
 Endpoints
     GET  /health  -> {"ok": true, "loaded": true, "model": "Julia-1", "device": "cpu", "load_ms": 2140}
     POST /decide  {"state": "...", "questions": {name: {...}}} -> {"answers": {...}, "ms": 41.2}
+    POST /embed   {"texts": [...], "kind": "query"|"document", "dims": 256} -> {"vectors": [[...]], "ms": 8.1}
     GET  /stats   -> call count and latency percentiles
 
 Only the Python standard library is used here; the model package brings its own deps.
@@ -23,6 +27,10 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 STATE = {"engine": None, "loaded": False, "error": None, "load_ms": None, "model": None, "device": None}
+EMBED = {"model": None, "name": None, "loaded": False, "error": None, "load_ms": None}
+ELOCK = threading.Lock()
+# EmbeddingGemma 2 is trained with short task prefixes on its inputs.
+PREFIX = {"query": "task: search result | query: ", "document": "title: none | text: "}
 LOCK = threading.Lock()
 TIMES = []
 
@@ -44,6 +52,24 @@ def load(model_path, device, max_length):
     except Exception as e:  # keep serving /health with the error so Batcave can fall back
         STATE.update(error=f"{type(e).__name__}: {e}")
         print(f"[batcave-alfred] failed to load model: {STATE['error']}", file=sys.stderr, flush=True)
+
+
+def load_embed(path, device):
+    t0 = time.perf_counter()
+    try:
+        from sentence_transformers import SentenceTransformer  # type: ignore
+        EMBED.update(model=SentenceTransformer(path, device=device), loaded=True, load_ms=round((time.perf_counter() - t0) * 1000))
+        print(f"[batcave-alfred] loaded embeddings {path} in {EMBED['load_ms']} ms", flush=True)
+    except Exception as e:
+        EMBED.update(error=f"{type(e).__name__}: {e}")
+        print(f"[batcave-alfred] failed to load embeddings: {EMBED['error']}", file=sys.stderr, flush=True)
+
+
+def embed(texts, kind, dims):
+    vecs = EMBED["model"].encode([PREFIX.get(kind, "") + t for t in texts], convert_to_numpy=True)
+    vecs = vecs[:, :dims]  # Matryoshka: the leading dimensions carry most of the meaning
+    norms = (vecs ** 2).sum(axis=1, keepdims=True) ** 0.5
+    return (vecs / (norms + 1e-12)).round(5).tolist()
 
 
 def to_plain(x):
@@ -82,13 +108,16 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/health":
             return self.send(200, {"ok": STATE["error"] is None, "loaded": STATE["loaded"], "model": STATE["model"],
-                                   "device": STATE["device"], "load_ms": STATE["load_ms"], "error": STATE["error"]})
+                                   "device": STATE["device"], "load_ms": STATE["load_ms"], "error": STATE["error"],
+                                   "embed": EMBED["loaded"], "embed_model": EMBED["name"], "embed_error": EMBED["error"]})
         if self.path == "/stats":
             recent = TIMES[-500:]
             return self.send(200, {"calls": len(TIMES), "p50_ms": pct(recent, 0.5), "p95_ms": pct(recent, 0.95)})
         self.send(404, {"error": "no such route"})
 
     def do_POST(self):
+        if self.path == "/embed":
+            return self.do_embed()
         if self.path != "/decide":
             return self.send(404, {"error": "no such route"})
         if not STATE["loaded"]:
@@ -113,6 +142,23 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(500, {"error": f"{type(e).__name__}: {e}"})
 
 
+    def do_embed(self):
+        if not EMBED["loaded"]:
+            return self.send(503, {"error": EMBED["error"] or "no embedding model (start with --embed)"})
+        try:
+            req = json.loads(self.rfile.read(int(self.headers.get("content-length") or 0)) or b"{}")
+            texts = [str(t)[:4000] for t in (req.get("texts") or [])][:256]
+            dims = int(req.get("dims") or 256)
+            if not texts:
+                return self.send(400, {"error": "texts must be a non-empty list"})
+            t0 = time.perf_counter()
+            with ELOCK:
+                vectors = embed(texts, req.get("kind", "document"), dims)
+            return self.send(200, {"vectors": vectors, "ms": round((time.perf_counter() - t0) * 1000, 1)})
+        except Exception as e:
+            return self.send(500, {"error": f"{type(e).__name__}: {e}"})
+
+
 def main():
     ap = argparse.ArgumentParser(description="Batcave Alfred: Julia-1 decision model sidecar")
     ap.add_argument("--model", default=os.path.expanduser("~/.batcave/alfred/Julia-1"))
@@ -120,9 +166,13 @@ def main():
     ap.add_argument("--port", type=int, default=4778)
     ap.add_argument("--device", default=os.environ.get("BATCAVE_ALFRED_DEVICE", "cpu"))
     ap.add_argument("--max-length", type=int, default=1024)
+    ap.add_argument("--embed", default="", help="path or Hugging Face id of an embedding model, e.g. google/embeddinggemma-2")
     a = ap.parse_args()
     STATE.update(model=os.path.basename(a.model.rstrip("/")), device=a.device)
     threading.Thread(target=load, args=(a.model, a.device, a.max_length), daemon=True).start()
+    if a.embed:
+        EMBED.update(name=os.path.basename(a.embed.rstrip("/")))
+        threading.Thread(target=load_embed, args=(a.embed, a.device), daemon=True).start()
     print(f"[batcave-alfred] listening on http://{a.host}:{a.port} (loading model...)", flush=True)
     ThreadingHTTPServer((a.host, a.port), Handler).serve_forever()
 

@@ -18,7 +18,7 @@ export class Alfred {
     try {
       const r = await fetch(this.url + '/health', { signal: AbortSignal.timeout(1500) });
       const j = await r.json();
-      this.health = { ok: Boolean(j.ok && j.loaded), model: j.model, device: j.device, loadMs: j.load_ms, checkedAt: Date.now() };
+      this.health = { ok: Boolean(j.ok && j.loaded), model: j.model, device: j.device, loadMs: j.load_ms, embed: Boolean(j.embed), embedModel: j.embed_model || null, checkedAt: Date.now() };
     } catch {
       this.health = { ok: false, checkedAt: Date.now() };
     }

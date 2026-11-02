@@ -10,6 +10,7 @@ import { Stats, estTokens } from './stats.mjs';
 import { Alfred, yesProb, topChoice } from './alfred.mjs';
 import { Assist } from './assist.mjs';
 import { setupRooms } from './rooms.mjs';
+import { Embeddings } from './embed.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const VERSION = '0.4.0';
@@ -28,6 +29,8 @@ const db = store.data;
 const stats = new Stats(store);
 const alfred = new Alfred(stats);
 const assist = new Assist({ alfred, stats, store, dataFile: DATA_FILE });
+const embeddings = new Embeddings(alfred, stats);
+assist.embed = embeddings;
 const ALFRED_PAUSE_MS = Number(process.env.BATCAVE_ALFRED_PAUSE_MS || 45000);
 
 // ---------- helpers ----------
@@ -206,12 +209,23 @@ async function renderContext(me, { session = '', prompt = '', force = false } = 
   const allMsgs = msgRoom ? db.messages.filter((m) => m.room === msgRoom && m.kind !== 'event').slice(-20) : [];
   const baseline = contextLines(me, p, t, allDecisions.slice(-15), allMsgs.slice(-8));
 
-  let decisions = allDecisions.slice(-15), msgs = allMsgs.slice(-8), ranked = false;
+  let decisions = allDecisions.slice(-15), msgs = allMsgs.slice(-8), ranked = false, recalled = 0;
   if (alfred.ready && (allDecisions.length > 5 || allMsgs.length > 3)) {
-    const cands = [
+    let cands = [
       ...allDecisions.map((d) => ({ kind: 'd', item: d, text: d.text })),
       ...allMsgs.map((m) => ({ kind: 'm', item: m, text: `${person(m.author)?.name || m.author}: ${m.text}` })),
     ].slice(-24);
+    // With embeddings: search every decision and the room's whole history, not
+    // just the latest few, and let Julia-1 judge only the closest dozen.
+    if (embeddings.ready) {
+      const wide = [
+        ...db.decisions.filter((d) => d.active && (d.room === 'team' || (focus && d.room === focus.id) || (t && d.room === t.room))).slice(-200).map((d) => ({ kind: 'd', item: d, text: d.text })),
+        ...(msgRoom ? db.messages.filter((m) => m.room === msgRoom && m.kind !== 'event').slice(-400) : []).map((m) => ({ kind: 'm', item: m, text: `${person(m.author)?.name || m.author}: ${m.text}` })),
+      ];
+      const query = [prompt, t && `${t.id} ${t.title}`, focus && `room ${focus.name}`].filter(Boolean).join('\n');
+      const sl = await embeddings.shortlist(query, wide, 12, (c) => c.text, 'rank');
+      if (sl) cands = sl.map((x) => x.item);
+    }
     const state = [`Developer: ${p?.name || me}`, t ? `Task ${t.id}: ${t.title}` : 'No active task', prompt ? `Current request: ${String(prompt).slice(0, 600)}` : ''].filter(Boolean).join('\n');
     const questions = Object.fromEntries(cands.map((c, i) => [`c${i}`, { type: 'noul', instructions: `Is this team note relevant to the developer's current task or request? Note: ${c.text.slice(0, 300)}` }]));
     const answers = await alfred.decide(state, questions, 'rank');
@@ -225,6 +239,10 @@ async function renderContext(me, { session = '', prompt = '', force = false } = 
     }
   }
 
+  if (ranked) {
+    const recent = new Set(allMsgs.slice(-8).map((m) => m.id));
+    recalled = msgs.filter((m) => !recent.has(m.id)).length;   // older messages brought back because they matter now
+  }
   let { text, reqs, hand } = contextLines(me, p, t, decisions, msgs);
   const suggestion = !t && prompt ? await suggestTask(me, prompt) : null;
   if (suggestion) text += `\nThe user's request looks like backlog task ${suggestion.task.id}: "${suggestion.task.title}". Before starting, ask the user whether to claim it (batcave_claim ${suggestion.task.id}).`;
@@ -240,7 +258,8 @@ async function renderContext(me, { session = '', prompt = '', force = false } = 
   }
   if (changed) stats.tokens('injected', estTokens(text)); else stats.tokens('savedDedupe', estTokens(text));
   stats.count('context_served');
-  return { task: t ? publicTask(t) : null, room: focus ? { id: focus.id, name: focus.name, branch: focus.branch } : null, suggestion: suggestion ? { task: suggestion.task.id, title: suggestion.task.title } : null, decisions, requests: reqs, handoffs: hand, text, changed, ranked, tokens: estTokens(text), baselineTokens: estTokens(baseline.text) };
+  if (recalled) stats.count('embed_recalled_messages', recalled);
+  return { task: t ? publicTask(t) : null, room: focus ? { id: focus.id, name: focus.name, branch: focus.branch } : null, recalled, suggestion: suggestion ? { task: suggestion.task.id, title: suggestion.task.title } : null, decisions, requests: reqs, handoffs: hand, text, changed, ranked, tokens: estTokens(text), baselineTokens: estTokens(baseline.text) };
 }
 
 // Alfred use 1: the user started work with no claim; does it match a backlog card?
@@ -260,7 +279,8 @@ function profileOf(x) {
   const files = [...new Set(db.touches.filter((y) => y.person === x.id).slice(-30).map((y) => path.basename(y.file)))].slice(-8);
   const done = Object.values(db.tasks).filter((y) => y.owner === x.id && y.status !== 'backlog').slice(-4).map((y) => y.title);
   const slices = Object.values(db.rooms).map((r) => r.slices?.[x.id] && `owns ${r.slices[x.id].name || 'the slice'} (${r.slices[x.id].paths.join(' ')}) in #${r.name || r.id}`).filter(Boolean);
-  return [x.name || x.id, x.role && `role ${x.role}`, t && `working on ${t.title}`, ...slices, done.length && `owns ${done.join('; ')}`, files.length && `recently edited ${files.join(', ')}`].filter(Boolean).join('. ');
+  const code = db.touches.filter((y) => y.person === x.id && y.hint).slice(-4).map((y) => `${y.file}: ${y.hint.slice(0, 120)}`);
+  return [x.name || x.id, x.role && `role ${x.role}`, t && `working on ${t.title}`, ...slices, done.length && `owns ${done.join('; ')}`, files.length && `recently edited ${files.join(', ')}`, code.length && `recent code: ${code.join(' / ')}`].filter(Boolean).join('. ');
 }
 
 async function routeRequest(me, text) {
@@ -789,7 +809,7 @@ route('GET', '/api/alfred/log', ({ query }) => db.alfredLog.slice(-Math.min(Numb
 // stats: latency and savings for the team
 route('GET', '/api/stats', () => ({
   ...stats.summary(),
-  alfred: { enabled: !alfred.disabled, ready: alfred.ready, url: alfred.url, ...alfred.health, quality: assist.quality() },
+  alfred: { enabled: !alfred.disabled, ready: alfred.ready, url: alfred.url, ...alfred.health, embeddings: embeddings.ready, quality: assist.quality() },
   team: { people: Object.keys(db.people).length, tasks: Object.keys(db.tasks).length, decisions: db.decisions.filter((d) => d.active).length },
 }));
 

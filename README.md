@@ -200,7 +200,7 @@ Every token Batcave sends to an agent is counted, and so is every token it avoid
 Alfred is [Julia-1](https://huggingface.co/SupersonicLabs/Julia-1) by Supersonic Labs (Apache-2.0, 144M parameters), a decision model that picks among supplied answers instead of generating text. It runs locally on CPU and is entirely optional: without it, Batcave uses plain rules.
 
 ```bash
-batcave alfred install          # downloads Julia-1 (~580 MB) into ~/.batcave/alfred
+batcave alfred install          # downloads Julia-1 and EmbeddingGemma 2 into ~/.batcave/alfred
 batcave server --alfred         # starts the server and Alfred together
 batcave stats                  # latency and savings
 ```
@@ -217,6 +217,14 @@ Beyond ranking, Alfred makes the small calls a teammate would:
 - **Handoff check.** No handoff leaves without done, left and how to test.
 - **Toast filter.** Only what matters to you interrupts you.
 - **@alfred in rooms.** Alfred decides when an LLM joins a conversation, and that LLM is a teammate's own agent. `@alfred` always gets an answer, from your agent or, if you have none, from a teammate's. A stuck room gets an agent too: whoever is best placed weighs in, on `w` or on its own. Turn on auto weigh-in and your agent joins the chat on its own, like a teammate.
+
+**Shortlisting with embeddings.** Julia-1 decides well among a few options and worse among many. Alfred also loads [EmbeddingGemma 2](https://huggingface.co/google/embeddinggemma-2) (Google, Apache-2.0, open weights), which finds the closest few by meaning first:
+
+- **Context** searches every decision and the room's whole history, so an answer from last week comes back when it matters, not just the last eight messages.
+- **Card matching and duplicates** search the whole backlog, not the first 15 or 20 cards.
+- **Routing** compares a question with each teammate's recent code, so it reaches whoever wrote it.
+
+Vectors stay on the server's machine. Skip it with `batcave alfred install --no-embed`; Alfred then works as before.
 
 Every call falls back to plain rules without Alfred, and every judgment is logged with its outcome, so `batcave stats` shows how often Alfred is right.
 
