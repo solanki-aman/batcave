@@ -27,7 +27,6 @@ Everyone keeps their own agent, their own machine and their own account. Batcave
 ## See it in action
 
 <p align="center"><img src="docs/assets/terminal.gif" alt="Aman on Claude Code and Tim on Codex sharing one Batcave: team context, board, claim, guard, decision, request, handoff, pulse and stats" width="100%"></p>
-<p align="center"><sub>Simulated session. Aman runs Claude Code, Tim runs Codex. Both see the same board, decisions and requests; Batcave's hooks print the team context and the guard, and each status line tracks the team.</sub></p>
 
 <p align="center">
   <a href="https://solanki-aman.github.io/batcave/"><img src="docs/assets/website.gif" alt="Scrolling through the Batcave website: the board scene, the guard scene, features, supported agents and install" width="100%"></a>

@@ -1,10 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 440" width="1200" height="440" role="img" aria-label="Batcave. Your agents, on the same team. Every coding agent on your team, one board, live presence, shared decisions and a guard.">
   <style>
-    .d{font-family:'Avenir Next','Segoe UI',-apple-system,Helvetica,Arial,sans-serif}
+    .d{font-family:'SF Mono','JetBrains Mono',Menlo,Consolas,monospace}
+    .glow{filter:drop-shadow(0 0 8px rgba(0,229,255,.6))}
     .m{font-family:'SF Mono',Menlo,Consolas,monospace}
-    .wire{stroke:#2A2E35;stroke-width:1.2;fill:none}
+    .wire{stroke:#0E3A47;stroke-width:1.2;fill:none}
     .sig{fill:none;stroke-width:2.4;stroke-linecap:round;stroke-dasharray:4 160;animation:sig 3s linear infinite}
-    .in{stroke:#F2B544}.out{stroke:#7FD1E3;animation-direction:reverse}
+    .in{stroke:#00E5FF}.out{stroke:#FF9E3D;animation-direction:reverse}
     .s2{animation-delay:-.6s}.s3{animation-delay:-1.2s}.s4{animation-delay:-1.8s}.s5{animation-delay:-2.4s}
     @keyframes sig{to{stroke-dashoffset:-164}}
     .orbit{transform-origin:900px 220px;animation:spin 60s linear infinite}
@@ -16,22 +17,27 @@
     .blink{animation:blink 1.6s ease-in-out infinite}@keyframes blink{50%{opacity:.25}}
   </style>
   <defs>
+    
     <radialGradient id="glow" cx="900" cy="220" r="150" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#F2B544" stop-opacity=".35"/><stop offset="1" stop-color="#F2B544" stop-opacity="0"/>
+      <stop offset="0" stop-color="#00E5FF" stop-opacity=".35"/><stop offset="1" stop-color="#00E5FF" stop-opacity="0"/>
     </radialGradient>
   </defs>
-  <rect width="1200" height="440" rx="22" fill="#0A0B0D"/>
+  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#00E5FF" stroke-opacity=".06"/></pattern>
+  <rect width="1200" height="440" rx="8" fill="#02060A"/>
+  <rect width="1200" height="440" rx="8" fill="url(#grid)"/>
+  <rect x=".5" y=".5" width="1199" height="439" rx="8" fill="none" stroke="#00E5FF" stroke-opacity=".35"/>
 
-  <text x="64" y="86" class="m" font-size="14" letter-spacing="1.2" fill="#F2B544">OPEN SOURCE · MIT · 7 AGENTS</text>
-  <text x="62" y="166" class="d" font-size="68" font-weight="800" fill="#ECEAE4" letter-spacing="-1.5">Your agents,</text>
-  <text x="62" y="240" class="d" font-size="68" font-weight="800" fill="#ECEAE4" letter-spacing="-1.5">on the <tspan fill="#F2B544">same team.</tspan></text>
-  <text x="64" y="290" class="d" font-size="19" fill="#A3A19A">One board, live presence, shared decisions and a guard</text>
-  <text x="64" y="316" class="d" font-size="19" fill="#A3A19A">for every coding agent on your team.</text>
+  <text x="64" y="86" class="m" font-size="14" fill="#00E5FF"><tspan fill="#FF9E3D">$ </tspan>batcave --version  v0.3 · open source · MIT</text>
+  <text x="62" y="160" class="d glow" font-size="54" font-weight="800" fill="#D8F6FF">YOUR AGENTS,</text>
+  <text x="62" y="226" class="d glow" font-size="54" font-weight="800" fill="#D8F6FF">ON THE <tspan fill="#00E5FF">SAME TEAM.</tspan></text>
+  <rect x="624" y="188" width="24" height="42" fill="#00E5FF" class="blink glow"/>
+  <text x="64" y="290" class="d" font-size="16" fill="#7FB3C2">One board, live presence, shared decisions and a guard</text>
+  <text x="64" y="316" class="d" font-size="16" fill="#7FB3C2">for every coding agent on your team.</text>
 
   <g transform="translate(64 350)">
-    <rect width="470" height="46" rx="11" fill="#14161A" stroke="#2A2E35"/>
-    <circle cx="22" cy="23" r="5" fill="#9BD48E" class="blink"/>
-    <text x="38" y="29" class="m" font-size="14" fill="#ECEAE4">wayne-tech · 5 online · 1 request · T-9 running</text>
+    <rect width="470" height="46" rx="4" fill="#06111A" stroke="#00E5FF" stroke-opacity=".6"/>
+    <circle cx="22" cy="23" r="5" fill="#39FF88" class="blink"/>
+    <text x="38" y="29" class="m" font-size="14" fill="#D8F6FF">wayne-tech · 5 online · 1 request · T-9 running</text>
   </g>
 
   <circle cx="900" cy="220" r="150" fill="url(#glow)"/>
@@ -41,15 +47,15 @@
     <path class="sig in" d="M760 120 L900 220"/><path class="sig out s2" d="M900 220 L1060 110"/><path class="sig in s3" d="M730 300 L900 220"/>
     <path class="sig in s4" d="M1080 300 L900 220"/><path class="sig out s5" d="M900 220 L900 390"/>
     <g class="d" font-size="12" font-weight="700">
-      <g class="n"><circle cx="760" cy="120" r="22" fill="#F2B544"/><text x="760" y="124" text-anchor="middle" fill="#0A0B0D">AS</text></g>
-      <g class="n"><circle cx="1060" cy="110" r="22" fill="#7FD1E3"/><text x="1060" y="114" text-anchor="middle" fill="#0A0B0D">TD</text></g>
-      <g class="n"><circle cx="730" cy="300" r="22" fill="#ECEAE4"/><text x="730" y="304" text-anchor="middle" fill="#0A0B0D">BG</text></g>
-      <g class="n"><circle cx="1080" cy="300" r="22" fill="#9BD48E"/><text x="1080" y="304" text-anchor="middle" fill="#0A0B0D">LF</text></g>
-      <g class="n"><circle cx="900" cy="390" r="22" fill="#F28C6B"/><text x="900" y="394" text-anchor="middle" fill="#0A0B0D">SK</text></g>
+      <g class="n"><circle cx="760" cy="120" r="22" fill="#00E5FF"/><text x="760" y="124" text-anchor="middle" fill="#02060A">AS</text></g>
+      <g class="n"><circle cx="1060" cy="110" r="22" fill="#FF9E3D"/><text x="1060" y="114" text-anchor="middle" fill="#02060A">TD</text></g>
+      <g class="n"><circle cx="730" cy="300" r="22" fill="#D8F6FF"/><text x="730" y="304" text-anchor="middle" fill="#02060A">BG</text></g>
+      <g class="n"><circle cx="1080" cy="300" r="22" fill="#39FF88"/><text x="1080" y="304" text-anchor="middle" fill="#02060A">LF</text></g>
+      <g class="n"><circle cx="900" cy="390" r="22" fill="#FF4FD8"/><text x="900" y="394" text-anchor="middle" fill="#02060A">SK</text></g>
     </g>
   </g>
-  <circle cx="900" cy="220" r="40" fill="none" stroke="#F2B544" stroke-width="1.5" class="halo"/>
-  <circle cx="900" cy="220" r="34" fill="#14161A" stroke="#F2B544" stroke-width="1.5"/>
-  <g fill="#F2B544"><circle cx="900" cy="208" r="5"/><circle cx="889" cy="228" r="5"/><circle cx="911" cy="228" r="5"/></g>
-  <path d="M900 208 L889 228 L911 228 Z" fill="none" stroke="#ECEAE4" stroke-width="1"/>
+  <circle cx="900" cy="220" r="40" fill="none" stroke="#00E5FF" stroke-width="1.5" class="halo"/>
+  <circle cx="900" cy="220" r="34" fill="#06111A" stroke="#00E5FF" stroke-width="1.5"/>
+  <g fill="#00E5FF"><circle cx="900" cy="208" r="5"/><circle cx="889" cy="228" r="5"/><circle cx="911" cy="228" r="5"/></g>
+  <path d="M900 208 L889 228 L911 228 Z" fill="none" stroke="#D8F6FF" stroke-width="1"/>
 </svg>
