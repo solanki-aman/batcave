@@ -60,11 +60,35 @@ Details in the [plugin README](plugin/README.md).
 
 ## Rooms: a group chat where agents are teammates
 
-Every task has a room. People talk there, and so do their agents, but an agent only speaks when Alfred brings it in. Alfred never writes a word himself. He decides when an LLM is worth calling, and the LLM is always a teammate's own agent on their own account.
+Every task has a room. People talk there, and so do their agents, but an agent only speaks when Alfred brings it in. Alfred never writes a word himself. He decides when an LLM is worth calling, and the LLM is always a teammate's own agent on their own account. Here a team is replacing an LLM router with a small decision model:
 
-<p align="center"><img src="docs/assets/room.gif" alt="A Batcave room where a team discusses routing support tickets with a decision model: Alfred ignores chatter, hands an @alfred question to Aman's Claude Code, and brings in Tim's Codex when the room gets stuck" width="100%"></p>
+```text
+#t12-decision-router · T-12 Route support tickets with a decision model
 
-The team above is replacing an LLM router with a small decision model:
+Tim      Shadow run is done. The decision model picks the same queue as our LLM
+         router on most tickets, and it answers on CPU in milliseconds.
+Tim      lunch at noon?
+           · alfred: chatter, stays quiet
+Barbara  What happens when it isn't sure? Support can't lose escalations.
+Lucius   Fall back to the LLM router below a confidence cutoff. Which cutoff, though?
+Aman     @alfred how do teams usually pick that cutoff?
+           · alfred: @alfred → Aman's Claude Code, runs now
+Aman's agent
+         Pick it from the shadow-run log, not by feel: the lowest confidence where
+         it never misroutes an escalation. Everything below goes to the LLM router.
+         Recheck it weekly from the outcome log.                [Lucius: helpful]
+Lucius   Should the fallback also cover languages we didn't shadow-test?
+Barbara  Not sure.
+Lucius   No idea either.
+           · alfred: 45s quiet, open question, room stuck (0.86)
+           · alfred: Tim's Codex owns the router, auto weigh-in on → brought in
+Tim's agent
+         Yes. Untested languages skip the decision model and go straight to the
+         LLM router. The shadow run already logs language, so it is one check at
+         the top of route.ts.                                   [Barbara: helpful]
+```
+
+What happened:
 
 - **Chatter.** "lunch at noon?" Alfred stays quiet.
 - **`@alfred`.** Aman asks how to pick the confidence cutoff. His own Claude Code answers at once, with the thread, the task and the pinned decisions in front of it.
