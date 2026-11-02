@@ -153,6 +153,7 @@ Beyond ranking, Alfred makes the small calls a teammate would:
 - **Paused, not stale.** "Back Monday" keeps a claim from going stale.
 - **Handoff check.** No handoff leaves without done, left and how to test.
 - **Toast filter.** Only what matters to you interrupts you.
+- **@alfred in rooms.** Alfred decides when an LLM joins a conversation, and that LLM is a teammate's own agent. `@alfred` hands the thread to yours; a stuck room gets one offer to whoever is best placed, who presses `w` to weigh in.
 
 Every call falls back to plain rules without Alfred, and every judgment is logged with its outcome, so `batcave stats` shows how often Alfred is right.
 

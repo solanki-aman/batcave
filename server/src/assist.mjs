@@ -17,6 +17,7 @@ export function overlap(a, b) {
   return n / Math.min(A.size, B.size);
 }
 
+export const SPEAK_BAR = Number(process.env.BATCAVE_SPEAK_BAR || 0.75);
 export const DECISION_BAR = Number(process.env.BATCAVE_DECISION_BAR || 0.7);
 
 export class Assist {
@@ -57,7 +58,7 @@ export class Assist {
 
   // How often each kind of suggestion was taken, by source.
   quality() {
-    const GOOD = new Set(['accepted', 'correct', 'proceeded-low', 'cancelled-real', 'returned', 'fixed']);
+    const GOOD = new Set(['accepted', 'correct', 'proceeded-low', 'cancelled-real', 'returned', 'fixed', 'helpful']);
     const out = {};
     for (const e of this.db.alfredLog) {
       const k = (out[`${e.kind}:${e.source}`] ||= { decisions: 0, withOutcome: 0, good: 0 });
@@ -161,6 +162,35 @@ export class Assist {
       id: d.id, text: d.text, author: d.author, room: d.room, p: Math.round(p * 100) / 100, source,
       logId: this.log('decision', { file, change: text.slice(0, 200), decision: d.id }, 'breaks', source, p),
     }));
+  }
+
+  // ---- 9. should Alfred speak up in a room? -------------------------------
+  //
+  // Calling an LLM into a conversation costs tokens and attention, and one that
+  // chimes in on every message is noise. Julia-1 reads the thread and answers
+  // four quick questions; an agent is only offered when there is an open
+  // question or the room is stuck, an outside answer would help, and it is not
+  // just chat. Without Julia-1 there are no offers: @alfred still works.
+
+  async shouldSpeak(roomName, task, thread) {
+    if (!thread.length) return { speak: false, source: 'rules' };
+    const state = [
+      `Team chat in #${roomName}${task ? ` about task ${task.id}: ${task.title}` : ''}.`,
+      ...thread.map((m) => `${m.who}: ${m.text}`),
+    ].join('\n').slice(-2500);
+    const ps = await this.yesno(state, [
+      'Is there a question in this conversation that nobody has answered yet?',
+      'Are the people in this conversation stuck, unsure or going in circles?',
+      'Would a short outside answer with facts or a concrete suggestion help this conversation right now?',
+      'Is this conversation only social chat or status updates?',
+    ], 'speak');
+    if (!ps) return { speak: false, source: 'rules' };
+    const [open, stuck, helps, chatter] = ps.map((x) => x ?? 0);
+    const speak = helps >= SPEAK_BAR && Math.max(open, stuck) >= 0.6 && chatter < 0.5;
+    const p = Math.round(Math.min(helps, Math.max(open, stuck)) * 100) / 100;
+    const reason = open >= stuck ? 'open question' : 'room looks stuck';
+    const logId = this.log('speak', { room: roomName, last: thread.at(-1)?.text.slice(0, 160), open, stuck, helps, chatter }, speak ? 'speak' : 'quiet', 'alfred', p);
+    return { speak, p, reason, source: 'alfred', logId };
   }
 
   // ---- 4. route a request to the right teammate --------------------------------

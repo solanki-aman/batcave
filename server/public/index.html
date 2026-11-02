@@ -75,6 +75,9 @@ main{padding:24px}
 .msg .author{color:var(--fg)}
 .msg.agent .author{color:var(--cy)}
 .msg.agent{border-left:1px solid rgba(124,207,220,.35);padding-left:10px}
+.msg.alfred{border:1px solid var(--line);border-left:2px solid var(--amb);background:rgba(214,161,96,.03);padding:8px 12px}
+.msg.alfred .author{color:var(--amb);letter-spacing:.06em}
+.fb{display:flex;gap:6px}
 .sr{position:absolute;left:-9999px}
 .empty{color:var(--dim);padding:8px 2px}
 .tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:14px}
@@ -195,9 +198,17 @@ function renderRooms(){
   const rooms = S.state.rooms;
   return `<div class="rooms"><nav class="roomlist" aria-label="Rooms">${rooms.map(r=>`<button data-room="${esc(r.id)}" aria-current="${r.id===S.room}">#${esc(r.name)}</button>`).join('')}</nav>
     <section class="msgs" aria-label="#${esc(S.room)}">
-      ${S.messages.map(m=>`<div class="msg ${esc(m.kind)}">${m.kind==='event'?`${esc(nameOf(m.author))} ${esc(m.text)} · ${ago(m.at)}`:`<span class="author">${esc(nameOf(m.author))}${m.kind==='agent'?"'s agent":''}</span> <span class="meta">${ago(m.at)}</span><div>${esc(m.text)}</div>${m.meta && m.meta.suggestPin && !m.meta.pinned ? `<button class="btn small suggest" data-pin="${m.id}">Pin as decision</button>` : ''}`}</div>`).join('') || '<p class="empty">No messages yet.</p>'}
-      <form id="say" class="row" style="margin-top:auto"><label class="sr" for="sayInput">Message #${esc(S.room)}</label><input id="sayInput" placeholder="Message #${esc(S.room)} · @name-agent asks their agent" style="flex:1"><button class="btn primary" type="submit">Send</button></form>
+      ${S.messages.map(m=>m.meta?.invocation!=null?alfredMsg(m):`<div class="msg ${esc(m.kind)}">${m.kind==='event'?`${esc(nameOf(m.author))} ${esc(m.text)} · ${ago(m.at)}`:`<span class="author">${esc(nameOf(m.author))}${m.kind==='agent'?"'s agent":''}</span> <span class="meta">${ago(m.at)}</span><div>${esc(m.text)}</div>${m.meta && m.meta.suggestPin && !m.meta.pinned ? `<button class="btn small suggest" data-pin="${m.id}">Pin as decision</button>` : ''}`}</div>`).join('') || '<p class="empty">No messages yet.</p>'}
+      <form id="say" class="row" style="margin-top:auto"><label class="sr" for="sayInput">Message #${esc(S.room)}</label><input id="sayInput" placeholder="Message #${esc(S.room)} · @alfred brings in your agent · @name-agent asks theirs" style="flex:1"><button class="btn primary" type="submit">Send</button></form>
     </section></div>`;
+}
+
+function alfredMsg(m){
+  const mine = m.meta?.feedback?.[ls.get('uid')];
+  const fb = mine === undefined
+    ? `<span class="fb"><button class="btn small" data-fb="${m.id}" data-helpful="1">helpful</button><button class="btn small" data-fb="${m.id}" data-helpful="0">not helpful</button></span>`
+    : `<span class="meta">${mine ? 'marked helpful' : 'marked not helpful'}</span>`;
+  return `<div class="msg alfred"><span class="author">${esc(nameOf(m.author))}'s agent</span> <span class="meta">${ago(m.at)} · via alfred</span><div>${esc(m.text)}</div><div class="row" style="margin-top:6px">${fb}</div></div>`;
 }
 
 function renderDecisions(){
@@ -247,6 +258,8 @@ document.addEventListener('click', async (e) => {
   if (r) { S.room = r.dataset.room; return refresh(); }
   const pin = e.target.closest('[data-pin]');
   if (pin) { const m = S.messages.find(x => String(x.id) === pin.dataset.pin); if (m) await api('POST','/api/decisions',{ text: m.text, room: m.room, fromMessage: m.id }); return refresh(); }
+  const fb = e.target.closest('[data-fb]');
+  if (fb) { await api('POST', `/api/messages/${fb.dataset.fb}/feedback`, { helpful: fb.dataset.helpful === '1' }); return refresh(); }
   const d = e.target.closest('[data-retire]');
   if (d) { await api('POST', `/api/decisions/${d.dataset.retire}/retire`); return refresh(); }
 });

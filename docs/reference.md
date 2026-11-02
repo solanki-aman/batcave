@@ -73,7 +73,8 @@ All `/api/*` routes except `/api/health` need `Authorization: Bearer <team token
 | POST | `/api/tasks/:id/status` | `status`, `pr`, `reviewer` | Move a card. |
 | GET | `/api/rooms` | | Rooms. |
 | GET | `/api/rooms/:id/messages` | `?limit=` | Recent messages. |
-| POST | `/api/rooms/:id/messages` | `text`, `kind` | Post. `@handle-agent` creates a request; `@team-agent` routes it. |
+| POST | `/api/rooms/:id/messages` | `text`, `kind`, `reply_to` | Post. `@handle-agent` creates a request; `@team-agent` routes it; `@alfred` hands the thread to an agent. `reply_to` links an agent's answer to an Alfred request. |
+| POST | `/api/messages/:id/feedback` | `helpful` | Rate an agent's answer to an Alfred request. |
 | GET | `/api/decisions` | `?room=` | Active decisions. |
 | POST | `/api/decisions` | `text`, `room`, `pattern`, `fromMessage` | Pin a decision. `pattern` is an optional regex for changes that break it. |
 | POST | `/api/decisions/check` | `text`, `file` | Pinned decisions a plan or change would break. |
@@ -172,6 +173,18 @@ Batcave can use [Julia-1](https://huggingface.co/SupersonicLabs/Julia-1), an ope
 | Toast filter | yes/no per event: worth interrupting now? | The mod only toasts what matters to you. Requests and handoffs always toast. |
 
 Every call has a rule-based fallback (keyword overlap and regexes), so all of the above works without Alfred, less sharply.
+
+### @alfred in rooms
+
+Alfred never writes text. He decides when an LLM should join a room conversation, and that LLM is always a teammate's own coding agent on their own account.
+
+| Trigger | Who answers | Runs when |
+|---|---|---|
+| `@alfred ...` from someone with an agent | the asker's own agent | at once in the Claude Code mod; at their next prompt in other agents |
+| `@alfred ...` from someone without one (dashboard) | the agent best placed to answer, picked by request routing | when that teammate presses **weigh in** (`w`) |
+| No mention, room goes quiet | a participant's agent | only if Julia-1 judges the room stuck, and only when they press **weigh in** |
+
+The agent receives a brief with the room's thread, its task and the pinned decisions, answers in at most 120 words with `batcave_say` (`reply_to` the request id), and does not change files unless asked. Quiet-room offers need Julia-1: it asks whether a question is open, whether the room is stuck, whether an outside answer would help and whether it is just chat, and offers only above `BATCAVE_SPEAK_BAR` (0.75). It waits `BATCAVE_ALFRED_PAUSE_MS` (45 s) after the last message and offers at most once per room every `BATCAVE_ALFRED_COOLDOWN_MIN` (30). Teammates mark answers helpful or not in the dashboard, which feeds the outcome log.
 
 ### Outcome log
 

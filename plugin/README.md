@@ -37,6 +37,8 @@ The look is deliberately quiet: hairline frames, muted text, cyan only for live 
 
 Cancel has the focus, so Enter keeps their work. Claude is told why it was stopped and to coordinate first. In a narrow terminal the pane is drawn in the band instead.
 
+**@alfred.** When you write `@alfred` in a room, the mod hands the thread to this session's Claude at once. When Alfred decides another room could use your agent, the band shows `alfred › #room could use your agent` and **weigh in** on `w`.
+
 **Toasts** for new requests to your agent, handoffs to you, and decisions pinned by teammates.
 
 ## Hooks

@@ -39,6 +39,7 @@ const state = {
   paneOpen: false,
   paneInBand: false,
   seen: { requests: new Set(), handoffs: new Set(), decisions: new Set() },
+  invoked: new Set(), // @alfred requests this session already took
   primed: false,
   held: null,         // guard hold: { file, touches, decision }
   timer: null,
@@ -210,6 +211,7 @@ async function refresh($) {
     state.stats = stats;
     state.error = "";
     await announce($, team);
+    await runAsked($, team);
     await $.process.run(["sh", "-c", 'd="${BATCAVE_HOME:-$HOME/.batcave}"; mkdir -p "$d" && date +%s > "$d/mod-active"'], { timeoutMs: 3000 });
   } catch (err) {
     state.error = String(err?.message ?? err).slice(0, 80);
@@ -217,12 +219,32 @@ async function refresh($) {
   $.ui.invalidate("ui.render");
 }
 
+// @alfred from this user: hand the room thread to this session's agent at once.
+// The user asked for it, so there is nothing to confirm. If another session of
+// the same user claimed it first, the server says so and this one stays quiet.
+async function runAsked($, team) {
+  const me = state.cfg.user;
+  for (const r of team.requests.filter((x) => x.to === me && x.kind === "alfred" && x.auto && !state.invoked.has(x.id))) {
+    state.invoked.add(r.id);
+    try {
+      await api($, "POST", `/api/requests/${r.id}/resolve`, { action: "accept" });
+    } catch {
+      continue;
+    }
+    $.ui.toast(`Batcave · @alfred: your agent is answering in #${r.room}`);
+    await $.prompt.submit({ text: r.brief });
+  }
+}
+
 // Toast what is new for this user since the last poll. The first poll only primes.
 async function announce($, team) {
   const me = state.cfg.user;
   const fresh = [];
-  for (const r of team.requests.filter((x) => x.to === me)) {
-    if (!state.seen.requests.has(r.id)) { state.seen.requests.add(r.id); fresh.push({ kind: "request", text: `${nameOf(r.from)} asked your agent: ${r.text}`, room: r.room }); }
+  for (const r of team.requests.filter((x) => x.to === me && !(x.kind === "alfred" && x.auto))) {
+    if (state.seen.requests.has(r.id)) continue;
+    state.seen.requests.add(r.id);
+    const text = r.kind === "alfred" ? `Alfred: ${r.text} Press w.` : `${nameOf(r.from)} asked your agent: ${r.text}`;
+    fresh.push({ kind: "request", text, room: r.room });
   }
   for (const h of team.handoffs.filter((x) => x.to === me)) {
     if (!state.seen.handoffs.has(h.id)) { state.seen.handoffs.add(h.id); fresh.push({ kind: "handoff", text: `${nameOf(h.from)} handed you ${h.task}`, room: "" }); }
@@ -266,7 +288,7 @@ async function answer($, req, action) {
   try {
     await api($, "POST", `/api/requests/${req.id}/resolve`, { action });
     if (action === "accept") {
-      await $.prompt.submit({ text: `Teammate request R-${req.id} from ${nameOf(req.from)}, which I accepted in Batcave: ${req.text}` });
+      await $.prompt.submit({ text: req.brief ?? `Teammate request R-${req.id} from ${nameOf(req.from)}, which I accepted in Batcave: ${req.text}` });
     } else {
       $.ui.toast(`Batcave · declined R-${req.id}`);
     }
@@ -331,7 +353,8 @@ function band($, t, columns) {
   if (!team) return Box({ paddingX: 1, children: [Text({ color: C.dim, children: "▍batcave · connecting" })] });
   const me = state.cfg.user;
   const online = team.people.filter((p) => p.presence !== "offline" && p.presence !== "away").length;
-  const reqs = team.requests.filter((r) => r.to === me).length;
+  const reqs = team.requests.filter((r) => r.to === me && r.kind !== "alfred").length;
+  const offer = team.requests.filter((r) => r.to === me && r.kind === "alfred" && !r.auto).at(-1);
   const mine = team.tasks.find((x) => x.owner === me && (x.status === "claimed" || x.status === "running"));
   const busy = team.people.filter((p) => p.id !== me && p.presence === "agent running").slice(0, columns >= 150 ? 2 : 1);
   const saved = state.stats?.tokens?.saved ?? 0;
@@ -346,6 +369,7 @@ function band($, t, columns) {
     Text({ key: "on", color: C.mut, children: `${online} online` }),
   ];
   if (reqs) parts.push(sep(Text, "s2"), Text({ key: "req", color: C.amb, children: `${reqs} request${reqs > 1 ? "s" : ""}` }));
+  if (offer) parts.push(sep(Text, "s5"), Text({ key: "offer", children: [Text({ key: "a", color: C.dim, children: "alfred › " }), Text({ key: "b", color: C.amb, children: `#${offer.room} could use your agent` })] }));
   parts.push(sep(Text, "s3"));
   if (suggestion) {
     parts.push(Text({ key: "mine", color: C.mut, children: [Text({ key: "a", color: C.dim, children: "looks like " }), Text({ key: "b", color: C.cy, children: suggestion.task }), Text({ key: "c", children: ` ${fit(suggestion.title, 40).trimEnd()}` })] }));
@@ -355,8 +379,8 @@ function band($, t, columns) {
     parts.push(Text({ key: "mine", color: C.dim, children: "no claim" }));
   }
   // optional segments, added while they fit: teammates' agents, then savings
-  const buttonCols = (suggestion ? 14 : 0) + 18 + (reqs ? 12 : 0);
-  let used = 30 + (reqs ? 13 : 0) + (suggestion ? 14 + suggestion.title.length : mine ? 16 : 11);
+  const buttonCols = (suggestion ? 14 : 0) + (offer ? 14 : 0) + 18 + (reqs ? 12 : 0);
+  let used = 30 + (reqs ? 13 : 0) + (offer ? 24 + offer.room.length : 0) + (suggestion ? 14 + suggestion.title.length : mine ? 16 : 11);
   for (const p of busy) {
     const now = fit(p.now || "working", 30).trimEnd();
     const len = 3 + p.name.length + 3 + now.length;
@@ -367,7 +391,8 @@ function band($, t, columns) {
   if (saved && used + 18 <= columns - buttonCols) parts.push(sep(Text, "s4"), Text({ key: "saved", color: C.dim, children: `${short(saved)} tok saved` }));
 
   const buttons = columns >= 90 ? [
-    ...(suggestion ? [Button({ key: "suggest", label: `claim ${suggestion.task}`, hotkey: "c", variant: "primary", onPress: () => claim($, suggestion.task) })] : []),
+    ...(offer ? [Button({ key: "offer", label: "weigh in", hotkey: "w", variant: "primary", onPress: () => answer($, offer, "accept") })] : []),
+    ...(suggestion ? [Button({ key: "suggest", label: `claim ${suggestion.task}`, hotkey: "c", variant: suggestion && !offer ? "primary" : "secondary", onPress: () => claim($, suggestion.task) })] : []),
     Button({ key: "board", label: "board", hotkey: "b", plain: true, dimColor: true, onPress: () => openPane($, 0) }),
     Button({ key: "team", label: "team", hotkey: "t", plain: true, dimColor: true, onPress: () => openPane($, 1) }),
     ...(reqs ? [Button({ key: "requests", label: "requests", hotkey: "q", plain: true, onPress: () => openPane($, 2) })] : []),
@@ -472,7 +497,7 @@ function teamTab(t, width) {
 
 function requestsTab($, t, width) {
   const { Box, Text, Button } = t;
-  const mine = state.team.requests.filter((r) => r.to === state.cfg.user);
+  const mine = state.team.requests.filter((r) => r.to === state.cfg.user && !(r.kind === "alfred" && r.auto));
   const out = [rule(Text, "h", "REQUESTS FOR YOUR AGENT", mine.length, width)];
   if (!mine.length) return [...out, Text({ key: "none", color: C.dim, children: "   nothing waiting" })];
   mine.slice(0, 5).forEach((r, i) => out.push(Box({

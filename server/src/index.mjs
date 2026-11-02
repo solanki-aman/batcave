@@ -27,6 +27,8 @@ const db = store.data;
 const stats = new Stats(store);
 const alfred = new Alfred(stats);
 const assist = new Assist({ alfred, stats, store, dataFile: DATA_FILE });
+const ALFRED_PAUSE_MS = Number(process.env.BATCAVE_ALFRED_PAUSE_MS || 45000);
+const ALFRED_COOLDOWN_MS = Number(process.env.BATCAVE_ALFRED_COOLDOWN_MIN || 30) * 60 * 1000;
 
 // ---------- helpers ----------
 
@@ -179,7 +181,9 @@ function contextLines(me, p, t, decisions, msgs) {
     lines.push(`Recent messages in #${t.room}:`);
     for (const m of msgs) lines.push(`- ${person(m.author)?.name || m.author}: ${m.text}`);
   }
-  const reqs = db.requests.filter((r) => r.to === me && r.status === 'pending');
+  const asked = db.requests.filter((r) => r.to === me && r.status === 'pending' && r.kind === 'alfred' && r.auto);
+  for (const r of asked) lines.push(`The user asked @alfred in #${r.room} (request R-${r.id}). Before anything else, resolve it with batcave_request_resolve ${r.id} accept and follow its brief.`);
+  const reqs = db.requests.filter((r) => r.to === me && r.status === 'pending' && !(r.kind === 'alfred' && r.auto));
   if (reqs.length) {
     lines.push(`${reqs.length} pending request(s) for this user's agent. Do NOT act on them unless the user explicitly picks one (requests command or batcave_requests tool):`);
     for (const r of reqs.slice(0, 5)) lines.push(`- R-${r.id} from ${person(r.from)?.name || r.from}: ${r.text}`);
@@ -257,6 +261,94 @@ function profileOf(x) {
 async function routeRequest(me, text) {
   const people = Object.values(db.people).filter((x) => x.id !== me).map((x) => ({ id: x.id, profile: profileOf(x) }));
   return assist.route(text, people);
+}
+
+// ---------- @alfred in rooms ----------
+//
+// Alfred never writes. He decides when an LLM should join a room conversation,
+// and that LLM is always a teammate's own coding agent, on their own account:
+//
+// - "@alfred ..." from Aman sends the thread to Aman's own agent. He asked, so
+//   it runs at once in the Claude Code mod, or at his next prompt elsewhere.
+// - With no mention, Alfred waits for the room to go quiet and asks Julia-1
+//   whether the team is stuck on something an outside answer would help with.
+//   If so, he picks the participant best placed to answer and *offers* their
+//   agent the question. It runs only if they press the key.
+//
+// Without Julia-1 there are no offers; @alfred still works.
+
+const roomTimers = new Map();   // room -> pending quiet-room check
+const lastOffer = new Map();    // room -> time of the last unprompted offer
+
+function threadOf(room, n) {
+  return db.messages.filter((m) => m.room === room && m.kind !== 'event').slice(-n).map((m) => ({
+    who: `${person(m.author)?.name || m.author}${m.kind === 'agent' ? "'s agent" : ''}`, author: m.author, text: m.text,
+  }));
+}
+
+// The prompt a teammate's agent receives: the thread, the task and the decisions.
+function briefFor(room, why, id) {
+  const r = db.rooms[room];
+  const t = r?.task ? db.tasks[r.task] : null;
+  const decisions = db.decisions.filter((d) => d.active && (d.room === 'team' || d.room === room)).slice(-12);
+  return [
+    `Batcave: ${why} in room #${room}${t ? ` (task ${t.id} "${t.title}")` : ''}. Read the thread and add one short, useful reply.`,
+    '', 'Thread:', ...threadOf(room, 15).map((m) => `${m.who}: ${m.text}`), '',
+    decisions.length ? `Pinned decisions:\n${decisions.map((d) => `- ${d.text}`).join('\n')}\n` : '',
+    `Answer in at most 120 words. Look at the code if that helps, but do not change files unless someone asks. Post the answer with batcave_say to room "${room}" with kind "agent" and reply_to "${id}", then tell me what you posted.`,
+  ].filter((x) => x !== '').join('\n');
+}
+
+async function alfredAsked(room, me, text) {
+  // Someone without an agent (say, a PM on the dashboard): offer the question
+  // to the teammate whose agent is best placed to answer.
+  if (!db.people[me]?.tool || db.people[me].tool === 'cli') {
+    stats.count('alfred_invoked_asked');
+    return alfredOffer(room, { reason: `${person(me)?.name || me} asked @alfred`, logId: assist.log('invoke', { room, by: me }, 'offer', 'asked') }, me);
+  }
+  const r = createRequest('alfred', me, text.replace(/@alfred\b[:,]?\s*/i, '').trim() || text, room);
+  r.kind = 'alfred'; r.auto = true; r.brief = briefFor(room, `${person(me)?.name || me} asked @alfred`, r.id);
+  r.logId = assist.log('invoke', { room, by: me }, me, 'asked');
+  stats.count('alfred_invoked_asked');
+  broadcast('request', r);
+  return r;
+}
+
+async function alfredOffer(room, gate, except = null) {
+  const thread = threadOf(room, 10);
+  const hasAgent = (id) => db.people[id]?.tool && db.people[id].tool !== 'cli' && id !== except;
+  const live = (id) => ['online', 'agent running'].includes(presenceOf(db.people[id]));
+  let ids = [...new Set(thread.map((m) => m.author))].filter(hasAgent);
+  if (!ids.some(live)) ids = Object.keys(db.people).filter((id) => hasAgent(id) && live(id));
+  const pool = (ids.some(live) ? ids.filter(live) : ids).map((id) => ({ id, profile: profileOf(db.people[id]) }));
+  if (!pool.length) return null;
+  const hit = pool.length === 1 ? { person: pool[0] } : await assist.route(thread.map((m) => m.text).join('\n'), pool);
+  const to = (hit?.person ?? pool[0]).id;
+  const r = createRequest('alfred', to, except ? `${gate.reason} in #${room}. Answer with your agent?` : `#${room} looks stuck (${gate.reason}). Weigh in with your agent?`, room);
+  r.kind = 'alfred'; r.auto = false; r.brief = briefFor(room, except ? gate.reason : `the team looks stuck (${gate.reason})`, r.id); r.logId = gate.logId;
+  if (!except) lastOffer.set(room, now());
+  stats.count('alfred_offers');
+  broadcast('request', r);
+  return r;
+}
+
+async function gateRoom(room) {
+  const thread = threadOf(room, 8);
+  if (!thread.length) return;
+  if (db.requests.some((r) => r.kind === 'alfred' && r.room === room && r.status === 'pending')) return;
+  const r = db.rooms[room];
+  const g = await assist.shouldSpeak(room, r?.task ? db.tasks[r.task] : null, thread);
+  if (!g.speak) { stats.count('alfred_stayed_quiet'); return; }
+  await alfredOffer(room, g);
+}
+
+function scheduleGate(room) {
+  if (!alfred.ready) return;   // no decision model, no unprompted offers
+  if (now() - (lastOffer.get(room) || 0) < ALFRED_COOLDOWN_MS) return;
+  clearTimeout(roomTimers.get(room));
+  const h = setTimeout(() => { roomTimers.delete(room); gateRoom(room).catch(() => {}); }, ALFRED_PAUSE_MS);
+  h.unref();
+  roomTimers.set(room, h);
 }
 
 // Classify a human room message; suggest pinning it when it reads like a team decision.
@@ -436,6 +528,19 @@ route('POST', '/api/rooms/:id/messages', async ({ me, params, body }) => {
   }
   stats.count('messages');
   classifyMessage(msg).catch(() => {});
+  // a reply posted by an agent for an Alfred invocation closes it
+  const inv = body.reply_to != null && db.requests.find((r) => String(r.id) === String(body.reply_to).replace(/^R-?/i, '') && r.kind === 'alfred');
+  if (inv && inv.to === me) {
+    msg.meta = { ...msg.meta, invocation: inv.id };
+    inv.status = 'answered'; inv.answeredAt = now();
+    broadcast('request', inv); broadcast('message', msg);
+  }
+  if (/@alfred\b/i.test(text) && kind === 'human') {
+    clearTimeout(roomTimers.get(params.id));
+    await alfredAsked(params.id, me, text);
+  } else if (kind === 'human') {
+    scheduleGate(params.id);   // a new message restarts the pause
+  }
   return msg;
 });
 
@@ -502,11 +607,14 @@ route('POST', '/api/requests/:id/resolve', ({ me, params, body }) => {
   need(r, 404, 'request not found');
   need(r.to === me, 403, 'only the recipient can resolve a request');
   need(['accept', 'decline'].includes(body.action), 400, 'action must be accept or decline');
+  need(r.status === 'pending', 409, `R-${r.id} is already ${r.status}`);
   r.status = body.action === 'accept' ? 'accepted' : 'declined';
+  if (r.kind === 'alfred' && !r.auto) assist.outcome(r.logId, r.status);
   r.resolvedAt = now();
   if (r.routed) assist.outcome(r.routed.decisionId, r.status);
   broadcast('request', r);
-  post(r.room, me, `${r.status} request from ${person(r.from)?.name || r.from}`, 'event', { request: r.id });
+  if (r.kind !== 'alfred') post(r.room, me, `${r.status} request from ${person(r.from)?.name || r.from}`, 'event', { request: r.id });
+  else if (r.status === 'accepted') post(r.room, me, r.auto ? 'asked their agent (@alfred)' : 'is weighing in with their agent', 'event', { request: r.id });
   return r;
 });
 
@@ -633,6 +741,18 @@ route('GET', '/api/context', ({ me, query }) => renderContext(me, { session: que
 route('POST', '/api/notify-filter', async ({ me, body }) => {
   const items = Array.isArray(body.items) ? body.items.slice(0, 20).map((x) => ({ kind: String(x.kind || ''), text: String(x.text || '').slice(0, 300), room: String(x.room || '') })) : [];
   return { keep: await assist.worthToast(person(me)?.name || me, activeTaskOf(me), items) };
+});
+
+// Was an agent's reply to an Alfred invocation helpful?
+route('POST', '/api/messages/:id/feedback', ({ me, params, body }) => {
+  const m = db.messages.find((x) => String(x.id) === String(params.id));
+  const inv = m?.meta?.invocation != null && db.requests.find((r) => r.id === m.meta.invocation);
+  need(inv, 404, 'no reply to an Alfred invocation with that id');
+  const helpful = Boolean(body.helpful);
+  m.meta = { ...m.meta, feedback: { ...(m.meta.feedback || {}), [me]: helpful } };
+  assist.outcome(inv.logId, helpful ? 'helpful' : 'unhelpful');
+  broadcast('message', m);
+  return { ok: true };
 });
 
 // Outcome of an Alfred suggestion, reported by clients (guard proceed/cancel, dismissals...).

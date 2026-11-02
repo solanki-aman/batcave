@@ -123,14 +123,16 @@ export const tools = {
   },
 
   batcave_say: {
-    description: 'Post a message to a room (default: active task room). Use kind "agent" when posting on the user\'s behalf as their agent, e.g. a work summary. Mention @handle-agent to send someone a request.',
-    schema: { text: { type: 'string' }, room: { type: 'string' }, kind: { type: 'string', enum: ['human', 'agent'] } },
+    description: 'Post a message to a room (default: active task room). Use kind "agent" when posting on the user\'s behalf as their agent, e.g. a work summary. Mention @handle-agent to send someone a request. @alfred asks for an outside opinion: Alfred hands the thread to the user\'s own agent. When answering an Alfred request, pass its id as reply_to.',
+    schema: { text: { type: 'string' }, room: { type: 'string' }, kind: { type: 'string', enum: ['human', 'agent'] }, reply_to: { type: 'string', description: 'Request id when this answers an Alfred request' } },
     required: ['text'],
-    run: async ({ text, room, kind }) => {
+    run: async ({ text, room, kind, reply_to }) => {
       const c = cfg();
       const r = room || (await api(c, 'GET', '/api/context')).task?.room || 'team';
-      await api(c, 'POST', `/api/rooms/${encodeURIComponent(r)}/messages`, { text, kind: kind || 'human' });
-      return `Posted to #${r}.`;
+      await api(c, 'POST', `/api/rooms/${encodeURIComponent(r)}/messages`, { text, kind: kind || 'human', reply_to: reply_to || undefined });
+      return /@alfred\b/i.test(text) && (kind || 'human') === 'human'
+        ? `Posted to #${r}. Alfred will hand the thread to your own agent (R-… in your requests); answer it there.`
+        : `Posted to #${r}.`;
     },
   },
 
@@ -198,7 +200,8 @@ export const tools = {
     required: ['id', 'action'],
     run: async ({ id, action }) => {
       const r = await api(cfg(), 'POST', `/api/requests/${encodeURIComponent(id)}/resolve`, { action });
-      return r.status === 'accepted' ? `Accepted R-${r.id}. Do this now: ${r.text}` : `Declined R-${r.id}.`;
+      if (r.status !== 'accepted') return `Declined R-${r.id}.`;
+      return r.brief ? `Accepted R-${r.id}. Do this now:\n${r.brief}` : `Accepted R-${r.id}. Do this now: ${r.text}`;
     },
   },
 
