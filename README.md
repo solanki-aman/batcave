@@ -6,12 +6,13 @@
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-141413?style=flat-square"></a>
   <img alt="Node 18+" src="https://img.shields.io/badge/node-18%2B-141413?style=flat-square">
   <img alt="Zero dependencies" src="https://img.shields.io/badge/dependencies-0-141413?style=flat-square">
-  <img alt="Supported agents: 7" src="https://img.shields.io/badge/agents-7-D97757?style=flat-square">
-  <img alt="MCP server" src="https://img.shields.io/badge/MCP-server-D97757?style=flat-square">
+  <img alt="Supported agents: 7" src="https://img.shields.io/badge/agents-7-F2B544?style=flat-square">
+  <img alt="MCP server" src="https://img.shields.io/badge/MCP-server-F2B544?style=flat-square">
 </p>
 
 <p align="center">
   <a href="https://solanki-aman.github.io/batcave/"><b>Website</b></a> ·
+  <a href="#see-it-in-action"><b>Demo</b></a> ·
   <a href="#quick-start"><b>Quick start</b></a> ·
   <a href="docs/walkthrough.md"><b>Walkthrough</b></a> ·
   <a href="docs/reference.md"><b>Reference</b></a>
@@ -23,8 +24,15 @@
 
 Everyone keeps their own agent, their own machine and their own account. Batcave shares state, never credentials, and never runs one person's agent for another.
 
+## See it in action
+
 <p align="center"><img src="docs/assets/terminal.gif" alt="Aman on Claude Code and Tim on Codex sharing one Batcave: team context, board, claim, guard, decision, request, handoff, pulse and stats" width="100%"></p>
 <p align="center"><sub>Simulated session. Aman runs Claude Code, Tim runs Codex. Both see the same board, decisions and requests; Batcave's hooks print the team context and the guard, and each status line tracks the team.</sub></p>
+
+<p align="center">
+  <a href="https://solanki-aman.github.io/batcave/"><img src="docs/assets/website.gif" alt="Scrolling through the Batcave website: the board scene, the guard scene, features, supported agents and install" width="100%"></a>
+</p>
+<p align="center"><sub>The <a href="https://solanki-aman.github.io/batcave/">website</a> plays a team's day as you scroll.</sub></p>
 
 ## Works with
 
