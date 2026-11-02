@@ -27,6 +27,12 @@ export function changedSinceLast(sessionId, text) {
   return hash !== last;
 }
 
+function git(args, cwd) {
+  try { return execFileSync('git', args, { cwd: cwd || process.cwd(), stdio: ['ignore', 'pipe', 'ignore'], timeout: 1500 }).toString().trim(); } catch { return null; }
+}
+// Is this commit already in the local checkout? Unknown commits (not fetched yet) count as no.
+const hasCommit = (sha, cwd) => git(['merge-base', '--is-ancestor', sha, 'HEAD'], cwd) !== null;
+
 // For agents that cannot "ask": deny the first attempt per file per session, allow the retry.
 function firstWarning(sessionId, file) {
   try {
@@ -88,10 +94,13 @@ export async function handle(ev, { canAsk = true } = {}) {
       if (ev.agent === 'claude' && modActive()) return {}; // the Batcave mod holds the edit in a pane instead
       const files = ev.files.map((f) => relPath(f, cfg.root));
       const change = ev.hint ? `&change=${encodeURIComponent(ev.hint)}` : '';
-      const g = await api(cfg, 'GET', `/api/guard?files=${encodeURIComponent(files.join(','))}&minutes=${cfg.guardMinutes}${change}`);
+      const branch = git(['rev-parse', '--abbrev-ref', 'HEAD'], ev.cwd) || '';
+      const g = await api(cfg, 'GET', `/api/guard?files=${encodeURIComponent(files.join(','))}&minutes=${cfg.guardMinutes}${change}&branch=${encodeURIComponent(branch)}`);
       const breaks = g.breaks || [];
+      const slices = g.slices || [];
+      const behind = (g.upstream || []).filter((p) => !hasCommit(p.sha, ev.cwd));
       const realOverlap = g.conflict && g.severity !== 'low';
-      if (!realOverlap && !breaks.length) {
+      if (!realOverlap && !breaks.length && !slices.length && !behind.length) {
         if (!g.conflict) return {};
         // Alfred judged the overlap trivial: let the edit through and just mention it
         const who = g.touches.map((t) => `${t.name}'s agent edited ${t.file} ${ago(t.at)}`).join('; ');
@@ -100,11 +109,13 @@ export async function handle(ev, { canAsk = true } = {}) {
       const parts = [];
       if (realOverlap) parts.push(g.touches.map((t) => `${t.name}'s agent edited ${t.file} ${ago(t.at)}${t.task ? ` (${t.task})` : ''}`).join('; '));
       if (breaks.length) parts.push(`this change looks like it breaks a team decision: ${breaks.map((b) => `"${b.text}" (D-${b.id}, ${b.author})`).join('; ')}`);
+      if (behind.length) parts.push(`${behind.map((p) => `${p.name} pushed a newer ${p.files.filter((f) => files.includes(f)).join(', ')} to ${branch} (${p.sha.slice(0, 7)})`).join('; ')}. This checkout does not have it yet: pull first (git pull --rebase)`);
+      if (slices.length) parts.push(slices.map((x) => `${x.file} is in ${x.name}'s slice of #${x.roomName} (${x.slice})`).join('; ') + '. Ask them in the room before changing it');
       const what = parts.join('. Also, ');
       if (canAsk) {
         return { guard: { mode: 'ask', reason: `Batcave guard: ${what}. ${breaks.length ? 'Change the edit to follow the decision, or ' : 'Coordinate before editing, or '}approve to continue.` } };
       }
-      const key = files.join(',') + (breaks.length ? `#d${breaks.map((b) => b.id).join('.')}` : '');
+      const key = files.join(',') + (breaks.length ? `#d${breaks.map((b) => b.id).join('.')}` : '') + (behind.length ? `#p${behind[0].sha.slice(0, 7)}` : '');
       if (!firstWarning(ev.sessionId, key)) return {};
       return { guard: { mode: 'deny', reason: `Batcave guard: ${what}. ${breaks.length ? 'Rework the edit so it follows the decision, or stop and tell the user. ' : 'Stop and tell the user before editing. '}If they say go ahead, retry the same edit and Batcave will allow it.` } };
     }
@@ -117,12 +128,15 @@ export async function handle(ev, { canAsk = true } = {}) {
       }
       if (ev.tool === 'shell' && ev.command) {
         const cmd = ev.command;
-        if (/\bgit\s+commit\b/.test(cmd)) {
-          let summary = '';
-          try { summary = execFileSync('git', ['log', '-1', '--format=%h %s'], { cwd: ev.cwd || process.cwd(), stdio: ['ignore', 'pipe', 'ignore'], timeout: 1500 }).toString().trim(); } catch {}
-          let branch = '';
-          try { branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: ev.cwd || process.cwd(), stdio: ['ignore', 'pipe', 'ignore'], timeout: 1500 }).toString().trim(); } catch {}
+        const isCommit = /\bgit\s+commit\b/.test(cmd), isPush = /\bgit\s+push\b/.test(cmd);
+        if (isCommit || isPush) {
+          const branch = git(['rev-parse', '--abbrev-ref', 'HEAD'], ev.cwd) || '';
+          const summary = isCommit ? git(['log', '-1', '--format=%h %s'], ev.cwd) : '';
           if (summary) await api(cfg, 'POST', '/api/events', { type: 'commit', summary, branch });
+          if (isPush && !/rejected|error:|fatal:/i.test(String(ev.output || ''))) {
+            const sha = git(['rev-parse', 'HEAD'], ev.cwd);
+            if (sha) await api(cfg, 'POST', '/api/events', { type: 'push', branch, sha });
+          }
           return {};
         }
         if (/\bgh\s+pr\s+create\b/.test(cmd)) {

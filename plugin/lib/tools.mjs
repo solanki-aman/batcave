@@ -111,7 +111,8 @@ export const tools = {
     schema: { room: { type: 'string' }, limit: { type: 'number' } },
     run: async ({ room, limit }) => {
       const c = cfg();
-      const r = room || (await api(c, 'GET', '/api/context')).task?.room || 'team';
+      const ctx0 = room ? null : await api(c, 'GET', '/api/context');
+      const r = room || ctx0.room?.id || ctx0.task?.room || 'team';
       const [msgs, s] = await Promise.all([api(c, 'GET', `/api/rooms/${encodeURIComponent(r)}/messages?limit=${limit || 25}`), api(c, 'GET', '/api/state')]);
       const people = byId(s.people);
       const lines = msgs.map((m) => {
@@ -119,6 +120,52 @@ export const tools = {
         return m.kind === 'event' ? `  · ${who} ${m.text} (${ago(m.at)})` : `  ${who} (${ago(m.at)}): ${m.text}`;
       });
       return `#${r}\n${lines.join('\n') || '  (no messages)'}`;
+    },
+  },
+
+  batcave_room: {
+    description: 'Manage rooms, the unit of shared work. A room carries a shared branch (each member works in their own checkout), members and their slices, run and test commands, room rules and cards. Actions: show, new, join, leave, rename, invite, set, slice. Members\' agents get the room as context.',
+    schema: {
+      action: { type: 'string', enum: ['show', 'new', 'join', 'leave', 'rename', 'invite', 'set', 'slice'] },
+      room: { type: 'string', description: 'Room id or name; defaults to the room you work in' },
+      name: { type: 'string', description: 'new: room name; rename: new name; slice: a label for your slice' },
+      members: { type: 'array', items: { type: 'string' }, description: 'new or invite: handles' },
+      slice: { type: 'string', description: 'join or slice: path patterns you own, e.g. "src/router/** tests/router/**"' },
+      branch: { type: 'string' }, setup: { type: 'string' }, dev: { type: 'string' }, test: { type: 'string' }, preview: { type: 'string' }, lint: { type: 'string' },
+      env: { type: 'string', description: 'Names of env vars the room needs (never values), comma separated' },
+      rules: { type: 'string', description: 'Room rules for every member\'s agent' },
+      add_task: { type: 'string', description: 'A card id to add to the room' },
+    },
+    required: ['action'],
+    run: async (a) => {
+      const c = cfg();
+      const ctx = a.room ? null : await api(c, 'GET', '/api/context');
+      const room = encodeURIComponent(String(a.room || ctx?.room?.id || ctx?.task?.room || 'team').replace(/^#/, ''));
+      const show = (r) => [
+        `#${r.name}${r.name !== r.id ? ` (${r.id})` : ''}${r.tasks?.length ? ` · cards ${r.tasks.join(', ')}` : ''}`,
+        `branch: ${r.branch || '(none yet)'}`,
+        `members: ${r.members.map((m) => `${m}${r.slices[m] ? ` [${r.slices[m].name ? r.slices[m].name + ': ' : ''}${r.slices[m].paths.join(' ')}]` : ''}`).join(', ') || '(none)'}`,
+        ...Object.entries(r.run || {}).filter(([, v]) => v && v.length).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`),
+        r.rules ? `rules:\n${r.rules}` : '',
+        r.pushes?.length ? `recent pushes: ${r.pushes.slice(-3).map((p) => `${p.by} ${p.sha.slice(0, 7)} (${p.files.length} files)`).join(', ')}` : '',
+      ].filter(Boolean).join('\n');
+      switch (a.action) {
+        case 'show': return show(await api(c, 'GET', `/api/rooms/${room}`));
+        case 'new': return show(await api(c, 'POST', '/api/rooms', { name: a.name, members: a.members, branch: a.branch }));
+        case 'rename': return show(await api(c, 'POST', `/api/rooms/${room}/rename`, { name: a.name }));
+        case 'invite': { const r = await api(c, 'POST', `/api/rooms/${room}/invite`, { members: a.members }); return `Added ${r.added.join(', ') || 'nobody new'} to #${r.name}.`; }
+        case 'leave': await api(c, 'POST', `/api/rooms/${room}/leave`); return 'Left the room.';
+        case 'slice': return show(await api(c, 'POST', `/api/rooms/${room}/slice`, { paths: a.slice || '', name: a.name }));
+        case 'set': return show(await api(c, 'POST', `/api/rooms/${room}/set`, { branch: a.branch, setup: a.setup, dev: a.dev, test: a.test, preview: a.preview, lint: a.lint, env: a.env, rules: a.rules, addTask: a.add_task }));
+        case 'join': {
+          const r = await api(c, 'POST', `/api/rooms/${room}/join`, { slice: a.slice, sliceName: a.name });
+          const next = r.branch
+            ? `\nTo work on the shared branch in its own checkout (run in the repo, ask the user first):\n  git fetch origin ${r.branch}\n  git worktree add ../$(basename "$PWD")-${r.id} ${r.branch}\nOr, if this checkout is free: git switch ${r.branch}`
+            : '\nThe room has no shared branch yet.';
+          return show(r) + next;
+        }
+        default: return 'Unknown action.';
+      }
     },
   },
 

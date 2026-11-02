@@ -9,6 +9,7 @@ import { Store } from './store.mjs';
 import { Stats, estTokens } from './stats.mjs';
 import { Alfred, yesProb, topChoice } from './alfred.mjs';
 import { Assist } from './assist.mjs';
+import { setupRooms } from './rooms.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const VERSION = '0.4.0';
@@ -121,7 +122,8 @@ function idleTooLong(t) {
 // A claim goes stale when it sits idle, unless its owner said they paused it.
 function decisionsFor(me) {
   const t = activeTaskOf(me);
-  return db.decisions.filter((d) => d.active && (d.room === 'team' || (t && d.room === t.room)));
+  const f = rooms.focusRoomOf(me);
+  return db.decisions.filter((d) => d.active && (d.room === 'team' || (t && d.room === t.room) || (f && d.room === f.id)));
 }
 
 function isStale(t) { return idleTooLong(t) && !t.paused; }
@@ -171,13 +173,14 @@ function contextLines(me, p, t, decisions, msgs) {
   const lines = [];
   lines.push(`[Batcave · team ${TEAM}] You are working with ${p ? p.name : me}.`);
   if (t) lines.push(`Active task ${t.id}: "${t.title}" on branch ${t.branch || '(none)'}, room #${t.room}.`);
-  else lines.push('No active task claimed. If the user starts new work, suggest checking the board and claiming a task (batcave_board, batcave_claim).');
+  else if (!rooms.focusRoomOf(me)) lines.push('No active task claimed. If the user starts new work, suggest checking the board and claiming a task (batcave_board, batcave_claim).');
+  lines.push(...rooms.contextLines(me));
   if (decisions.length) {
     lines.push('Team decisions (follow these unless the user overrides them):');
     for (const d of decisions) lines.push(`- ${d.text} (${person(d.author)?.name || d.author})`);
   }
-  if (t && msgs.length) {
-    lines.push(`Recent messages in #${t.room}:`);
+  if (msgs.length) {
+    lines.push(`Recent messages in #${rooms.focusRoomOf(me)?.name || t?.room}:`);
     for (const m of msgs) lines.push(`- ${person(m.author)?.name || m.author}: ${m.text}`);
   }
   const asked = db.requests.filter((r) => r.to === me && r.status === 'pending' && r.kind === 'alfred' && r.auto);
@@ -197,8 +200,10 @@ function contextLines(me, p, t, decisions, msgs) {
 async function renderContext(me, { session = '', prompt = '', force = false } = {}) {
   const p = person(me);
   const t = activeTaskOf(me);
-  const allDecisions = db.decisions.filter((d) => d.active && (d.room === 'team' || (t && d.room === t.room))).slice(-30);
-  const allMsgs = t ? db.messages.filter((m) => m.room === t.room && m.kind !== 'event').slice(-20) : [];
+  const focus = rooms.focusRoomOf(me);
+  const allDecisions = db.decisions.filter((d) => d.active && (d.room === 'team' || (focus && d.room === focus.id) || (t && d.room === t.room))).slice(-30);
+  const msgRoom = focus?.id || t?.room;
+  const allMsgs = msgRoom ? db.messages.filter((m) => m.room === msgRoom && m.kind !== 'event').slice(-20) : [];
   const baseline = contextLines(me, p, t, allDecisions.slice(-15), allMsgs.slice(-8));
 
   let decisions = allDecisions.slice(-15), msgs = allMsgs.slice(-8), ranked = false;
@@ -235,7 +240,7 @@ async function renderContext(me, { session = '', prompt = '', force = false } = 
   }
   if (changed) stats.tokens('injected', estTokens(text)); else stats.tokens('savedDedupe', estTokens(text));
   stats.count('context_served');
-  return { task: t ? publicTask(t) : null, suggestion: suggestion ? { task: suggestion.task.id, title: suggestion.task.title } : null, decisions, requests: reqs, handoffs: hand, text, changed, ranked, tokens: estTokens(text), baselineTokens: estTokens(baseline.text) };
+  return { task: t ? publicTask(t) : null, room: focus ? { id: focus.id, name: focus.name, branch: focus.branch } : null, suggestion: suggestion ? { task: suggestion.task.id, title: suggestion.task.title } : null, decisions, requests: reqs, handoffs: hand, text, changed, ranked, tokens: estTokens(text), baselineTokens: estTokens(baseline.text) };
 }
 
 // Alfred use 1: the user started work with no claim; does it match a backlog card?
@@ -254,7 +259,8 @@ function profileOf(x) {
   const t = activeTaskOf(x.id);
   const files = [...new Set(db.touches.filter((y) => y.person === x.id).slice(-30).map((y) => path.basename(y.file)))].slice(-8);
   const done = Object.values(db.tasks).filter((y) => y.owner === x.id && y.status !== 'backlog').slice(-4).map((y) => y.title);
-  return [x.name || x.id, x.role && `role ${x.role}`, t && `working on ${t.title}`, done.length && `owns ${done.join('; ')}`, files.length && `recently edited ${files.join(', ')}`].filter(Boolean).join('. ');
+  const slices = Object.values(db.rooms).map((r) => r.slices?.[x.id] && `owns ${r.slices[x.id].name || 'the slice'} (${r.slices[x.id].paths.join(' ')}) in #${r.name || r.id}`).filter(Boolean);
+  return [x.name || x.id, x.role && `role ${x.role}`, t && `working on ${t.title}`, ...slices, done.length && `owns ${done.join('; ')}`, files.length && `recently edited ${files.join(', ')}`].filter(Boolean).join('. ');
 }
 
 async function routeRequest(me, text) {
@@ -321,7 +327,7 @@ async function alfredOffer(room, gate, except = null) {
   const optedIn = Object.keys(db.people).filter((id) => db.people[id].autoWeighIn && db.people[id].tool && db.people[id].tool !== 'cli' && id !== except);
   const hasAgent = (id) => db.people[id]?.tool && db.people[id].tool !== 'cli' && id !== except && (!forced || !optedIn.length || db.people[id].autoWeighIn);
   const live = (id) => ['online', 'agent running'].includes(presenceOf(db.people[id]));
-  let ids = [...new Set(thread.map((m) => m.author))].filter(hasAgent);
+  let ids = [...new Set([...thread.map((m) => m.author), ...(db.rooms[room]?.members || [])])].filter(hasAgent);
   if (!ids.some(live)) ids = Object.keys(db.people).filter((id) => hasAgent(id) && live(id));
   const pool = (ids.some(live) ? ids.filter(live) : ids).map((id) => ({ id, profile: profileOf(db.people[id]) }));
   if (!pool.length) return null;
@@ -408,13 +414,15 @@ const route = (method, pattern, handler, opts = {}) => {
   routes.push({ method, pattern, re, keys, handler, opts });
 };
 
+const rooms = setupRooms({ route, db, now, need, str, cleanId, slugify, person, broadcast, post, HttpError, activeTaskOf });
+
 route('GET', '/api/health', () => ({ ok: true, team: TEAM, version: VERSION, auth: Boolean(TOKEN) }), { public: true });
 
 route('GET', '/api/state', () => ({
   team: TEAM,
   people: Object.values(db.people).map(publicPerson),
   tasks: Object.values(db.tasks).map(publicTask),
-  rooms: Object.values(db.rooms),
+  rooms: Object.values(db.rooms).map((r) => rooms.publicRoom(r)),
   decisions: db.decisions.filter((d) => d.active),
   requests: db.requests.filter((r) => r.status === 'pending'),
   handoffs: db.handoffs.filter((h) => h.status === 'open'),
@@ -487,6 +495,7 @@ route('POST', '/api/tasks/:id/claim', async ({ me, params, body }) => {
   setTask(t, { owner: me, status: t.status === 'backlog' || t.status === 'claimed' ? 'claimed' : t.status, branch, lastActivity: now() }, me, true);
   post(t.room, me, prev && prev !== me ? `took over ${t.id} from ${person(prev)?.name || prev}` : `claimed ${t.id}`, 'event', { task: t.id });
   const p = person(me); p.task = t.id; p.branch = branch;
+  rooms.onClaim(t, me);
   broadcast('person', publicPerson(p));
   stats.count('claims');
   return { task: publicTask(t), otherActive: others.map(publicTask), context: await renderContext(me) };
@@ -510,7 +519,7 @@ route('POST', '/api/tasks/:id/status', ({ me, params, body }) => {
 });
 
 // rooms
-route('GET', '/api/rooms', () => Object.values(db.rooms));
+route('GET', '/api/rooms', () => Object.values(db.rooms).map((r) => rooms.publicRoom(r)));
 
 route('GET', '/api/rooms/:id/messages', ({ params, query }) => {
   const limit = Math.min(Number(query.limit) || 30, 200);
@@ -521,6 +530,7 @@ route('POST', '/api/rooms/:id/messages', async ({ me, params, body }) => {
   const text = str(body.text, 'text');
   const kind = body.kind === 'agent' ? 'agent' : 'human';
   const msg = post(params.id, me, text, kind);
+  rooms.onPost(params.id, me);
   // @mentions of a person's agent (@aman-agent, @aman-claude, @aman-codex...) become requests in their inbox
   for (const m of text.matchAll(/@([a-z0-9._-]+?)-(?:agent|claude|codex|cursor|gemini|copilot|opencode)\b/gi)) {
     const to = cleanId(m[1]);
@@ -658,6 +668,7 @@ route('POST', '/api/handoffs/:id/pickup', ({ me, params }) => {
   need(h.to === me, 403, 'this handoff is not for you');
   h.status = 'picked'; h.pickedAt = now();
   const t = getTask(h.task);
+  rooms.onClaim(t, me);
   broadcast('handoff', h);
   return {
     handoff: h, task: publicTask(t),
@@ -704,6 +715,8 @@ route('POST', '/api/events', async ({ me, body }) => {
       post(target.room, me, `committed ${summary}`, 'agent', { task: target.id, linkedBy: link?.source || 'active' });
       broadcast('task', publicTask(target));
     }
+  } else if (type === 'push') {
+    rooms.recordPush(me, String(body.branch || '').slice(0, 200), String(body.sha || ''));
   } else if (type === 'pr') {
     if (t) setTask(t, { status: 'review', pr: String(body.url || body.summary || '').slice(0, 300) }, me);
   }
@@ -729,12 +742,15 @@ route('GET', '/api/guard', async ({ me, query }) => {
   // Decision check: does the change break a decision pinned for the team or this task?
   const breaks = change ? await assist.decisionConflicts(files[0], change, decisionsFor(me)) : [];
   if (breaks.length) stats.count('decision_breaks');
-  if (!list.length) return { conflict: false, touches: [], breaks };
+  // Shared rooms: other members' slices, and pushes to the branch this checkout is on
+  const slices = rooms.sliceConflicts(me, files);
+  const upstream = rooms.upstreamFor(me, String(query.branch || '')).filter((p) => p.files.some((f) => files.includes(f)));
+  if (!list.length) return { conflict: false, touches: [], breaks, slices, upstream };
   stats.count('guard_conflicts');
   // Alfred use 3: is this a real overlap, or a trivial one (imports, unrelated hunks)?
   const sev = await assist.guardSeverity(list[0].file, change, list);
   if (sev.level === 'low') stats.count('guard_low');
-  return { conflict: true, severity: sev.level, decisionId: sev.decisionId, source: sev.source, touches: list, breaks };
+  return { conflict: true, severity: sev.level, decisionId: sev.decisionId, source: sev.source, touches: list, breaks, slices, upstream };
 });
 
 // Check a planned change or a plan against pinned decisions before doing it.

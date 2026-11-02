@@ -142,7 +142,7 @@ batcave/
 │   ├── scripts/statusline.mjs        # status line, cached 10 s
 │   ├── lib/agents.mjs                # per-agent payload and reply adapters
 │   ├── lib/hookcore.mjs              # agent-independent hook logic
-│   ├── lib/tools.mjs                 # the 19 tools, shared by MCP and the CLI
+│   ├── lib/tools.mjs                 # the 20 tools, shared by MCP and the CLI
 │   └── lib/client.mjs                # config and HTTP client
 ├── server/
 │   ├── src/index.mjs                 # HTTP API, SSE, domain logic
@@ -173,6 +173,25 @@ Batcave can use [Julia-1](https://huggingface.co/SupersonicLabs/Julia-1), an ope
 | Toast filter | yes/no per event: worth interrupting now? | The mod only toasts what matters to you. Requests and handoffs always toast. |
 
 Every call has a rule-based fallback (keyword overlap and regexes), so all of the above works without Alfred, less sharply.
+
+### Rooms
+
+A room carries the shared work: `branch`, `members`, `slices` (per member: path patterns and a label), `run` (`setup`, `dev`, `test`, `preview`, `lint`, and `env` names), `rules`, and `tasks`. Claiming a card sets its room's branch and adds the owner; posting in a room joins it. The members' agents get the room in their context, ranked and deduped like the rest.
+
+The guard takes the checkout's branch (`branch=`) and returns `slices` (the file is in another member's slice) and `upstream` (teammates' pushes to that branch that carried the file). The hook or mod checks locally with `git merge-base --is-ancestor` whether those commits are in the checkout, so nothing is fetched. Pushes come from the post-tool hook seeing `git push`.
+
+| Method | Route | Body | Purpose |
+|---|---|---|---|
+| POST | `/api/rooms` | `name`, `members`, `branch`, `tasks` | New room. |
+| GET | `/api/rooms/:id` | | Room with its recent pushes. |
+| POST | `/api/rooms/:id/rename` | `name` | Rename (the id stays). |
+| POST | `/api/rooms/:id/invite` | `members` | Add teammates. |
+| POST | `/api/rooms/:id/join` | `slice`, `sliceName` | Join, optionally with a slice. |
+| POST | `/api/rooms/:id/leave` | | Leave and drop your slice. |
+| POST | `/api/rooms/:id/slice` | `paths`, `name` | Set or clear your slice. |
+| POST | `/api/rooms/:id/set` | `branch`, `setup`, `dev`, `test`, `preview`, `lint`, `env`, `rules`, `addTask` | Room context, members only. |
+
+`POST /api/events` with `type: "push"`, `branch`, `sha` records a push.
 
 ### @alfred in rooms
 

@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://solanki-aman.github.io/batcave/"><b>Website</b></a> ·
   <a href="#see-it-in-action"><b>Demo</b></a> ·
-  <a href="#rooms-a-group-chat-where-agents-are-teammates"><b>Rooms</b></a> ·
+  <a href="#rooms-shared-work-one-place"><b>Rooms</b></a> ·
   <a href="#quick-start"><b>Quick start</b></a> ·
   <a href="docs/walkthrough.md"><b>Walkthrough</b></a> ·
   <a href="docs/reference.md"><b>Reference</b></a>
@@ -58,9 +58,31 @@ In Claude Code, Batcave is a mod. It draws the team above your prompt and holds 
 
 Details in the [plugin README](plugin/README.md).
 
-## Rooms: a group chat where agents are teammates
+## Rooms: shared work, one place
 
-Every task has a room. People talk there, and so do their agents, but an agent only speaks when Alfred brings it in. Alfred never writes a word himself. He decides when an LLM is worth calling, and the LLM is always a teammate's own agent on their own account. Here a team is replacing an LLM router with a small decision model:
+A room is where a piece of work lives. Join it and you have everything you need to start: the branch, your own checkout of it, who owns which part, how to run and test, and the rules everyone's agent follows.
+
+```text
+#router-rewrite · cards T-12, T-13
+branch    aman/t-12-decision-router         you: ↓1 behind, tim pushed    [p pull]
+members   Aman      no slice
+          Tim       router core · src/router/**
+          Barbara   (dashboard)
+run       dev: npm run dev · test: npm test -- router · env: ROUTER_MODEL_URL, EDGE_TOKEN
+rules     Mock the edge client in tests.
+```
+
+- **One branch, a checkout each.** `batcave room join router-rewrite` adds you and creates a git worktree of the room's branch next to your repo, so your agent never disturbs your main checkout. `--here` switches the current one instead.
+- **Stay in sync without fetching.** Every push is recorded with the files it carried. The band shows `↓1 · tim pushed` with a pull key, and an edit to a file a teammate pushed is held with **pull first**.
+- **Slices.** `--slice "src/router/**"` claims part of the room. Edits to someone else's slice are held, and Alfred routes questions to whoever owns the code.
+- **Run, test and rules.** `batcave room set router-rewrite --test "npm test -- router" --env ROUTER_MODEL_URL --rules "Mock the edge client in tests."` Every member's agent gets them as context, so everyone tests the same way. Env stores names, never values.
+- **Rename and invite.** `batcave room rename`, `batcave room invite router-rewrite @tim`, or from the dashboard. Invites show up as a toast. `batcave room new "pricing experiments" @tim @lucius` starts a room that isn't tied to a card.
+
+In Claude Code, the `/cave` Room tab shows all of this. Agents use one `batcave_room` tool for show, new, join, leave, rename, invite, set and slice.
+
+### A group chat where agents are teammates
+
+Every room has a chat. People talk there, and so do their agents, but an agent only speaks when Alfred brings it in. Alfred never writes a word himself. He decides when an LLM is worth calling, and the LLM is always a teammate's own agent on their own account. Here a team is replacing an LLM router with a small decision model:
 
 ```text
 #t12-decision-router · T-12 Route support tickets with a decision model
@@ -163,7 +185,7 @@ batcave decide "Reuse surface tokens. No new colors." --pattern '#[0-9a-f]{6}'
 - **Server.** One per team. Holds people, tasks, rooms, decisions, requests, handoffs and recent file edits. JSON API, live event stream and dashboard. Zero dependencies.
 - **Claude Code mod.** A hooks module that draws the team band, the `/cave` pane and the guard pane inside Claude Code.
 - **Hooks.** One script serves every agent; small adapters translate each vendor's payloads. They report presence and activity and push team context into the agent. Every hook fails open with a short timeout.
-- **MCP server.** Nineteen tools (`batcave_board`, `batcave_claim`, `batcave_request`, ...) so any agent can read and change shared state.
+- **MCP server.** Twenty tools (`batcave_board`, `batcave_claim`, `batcave_request`, ...) so any agent can read and change shared state.
 - **CLI.** `batcave init` wires agents up; `batcave board`, `people`, `claim`, `say` and more work from any shell.
 
 See the [walkthrough](docs/walkthrough.md) for five sequence diagrams of a team's day, and the [reference](docs/reference.md) for hooks, configuration and the API.

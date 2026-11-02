@@ -14,16 +14,17 @@ Narrow terminals drop the teammate activity, then the savings, then the buttons.
 
 The look is deliberately quiet: hairline frames, muted text, cyan only for live work and your claim, amber only for what needs you.
 
-**The Batcave pane**, opened with `/cave` (or `/cave team`, `/cave requests`, `/cave stats`) or the band's buttons. Four tabs, switched with `1` to `4`:
+**The Batcave pane**, opened with `/cave` (or `/cave room`, `/cave team`, `/cave requests`, `/cave stats`) or the band's buttons. Five tabs, switched with `1` to `5`:
 
 | Tab | What it shows | Buttons |
 |---|---|---|
 | Board | Backlog, Claimed, Running, Review, Done | **Claim** on backlog cards and **Take over** on stale ones. Claiming asks Claude to create the branch and brief you. |
+| Room | The room you work in: shared branch and whether you are behind, members and slices, run and test, rules | **pull** when teammates pushed. |
 | Team | Each teammate's presence, agent, what it is doing now, and the week's numbers | |
 | Requests | Asks from teammates for your agent | **Run on my agent** submits the request as your prompt. **Decline** answers it. |
 | Stats | Tokens saved (dedupe and Alfred ranking), hook and Alfred latency (p50 and p95), and how often Alfred's suggestions are taken | |
 
-**The guard pane.** When Claude is about to edit a file another teammate's agent changed recently, or to write a change that breaks a pinned decision, the edit is held in a pane:
+**The guard pane.** When Claude is about to edit a file another teammate's agent changed recently, a file a teammate pushed that this checkout does not have yet (with **pull first**), a file in another member's slice, or to write a change that breaks a pinned decision, the edit is held in a pane:
 
 ```text
 ┌──────────────────────────────────────────────────────────┐

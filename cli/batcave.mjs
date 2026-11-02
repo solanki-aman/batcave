@@ -121,6 +121,34 @@ async function alfredStatus() {
   } catch { out(`○ No alfred running at ${url}. Start it with: batcave alfred start`); }
 }
 
+// Join a room and get a checkout of its shared branch: a new worktree next to
+// this repo by default, or the current checkout with --here.
+async function roomJoin(roomArg) {
+  const { loadConfig, api } = await import(pathToFileURL(path.join(PLUGIN, 'lib', 'client.mjs')).href);
+  const cfg = loadConfig();
+  const r = await api(cfg, 'POST', `/api/rooms/${encodeURIComponent(roomArg.replace(/^#/, ''))}/join`, { slice: typeof flags.slice === 'string' ? flags.slice : undefined, sliceName: typeof flags.name === 'string' ? flags.name : undefined }, 5000);
+  out(`Joined #${r.name}${r.slices?.[cfg.user] ? ` with the slice ${r.slices[cfg.user].paths.join(' ')}` : ''}.`);
+  if (!r.branch) { out('The room has no shared branch yet. Set one with: batcave room set ' + r.id + ' --branch <name>'); return; }
+  const g = (args, opts = {}) => spawnSync('git', args, { encoding: 'utf8', ...opts });
+  const top = g(['rev-parse', '--show-toplevel']).stdout.trim();
+  if (!top) { out(`Not in a git repo. In your repo: git fetch origin ${r.branch} && git worktree add ../<repo>-${r.id} ${r.branch}`); return; }
+  g(['fetch', 'origin', r.branch], { cwd: top, stdio: 'ignore' });
+  const local = g(['rev-parse', '--verify', '--quiet', `refs/heads/${r.branch}`], { cwd: top }).status === 0;
+  const remote = g(['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${r.branch}`], { cwd: top }).status === 0;
+  if (!local && !remote) { out(`The branch ${r.branch} is not on origin yet. Ask its owner to push it, then run this again.`); return; }
+  if (flags.here) {
+    const sw = local ? g(['switch', r.branch], { cwd: top }) : g(['switch', '-c', r.branch, '--track', `origin/${r.branch}`], { cwd: top });
+    if (sw.status !== 0) die(sw.stderr.trim() || 'git switch failed');
+    out(`Switched this checkout to ${r.branch}.`);
+    return;
+  }
+  const dir = path.join(path.dirname(top), `${path.basename(top)}-${r.id}`);
+  if (fs.existsSync(dir)) { out(`Worktree already there: ${dir}`); return; }
+  const wt = local ? g(['worktree', 'add', dir, r.branch], { cwd: top }) : g(['worktree', 'add', '--track', '-b', r.branch, dir, `origin/${r.branch}`], { cwd: top });
+  if (wt.status !== 0) die(wt.stderr.trim() || 'git worktree add failed');
+  out(`Checked out ${r.branch} in ${dir}\nStart your agent there: cd ${dir}`);
+}
+
 async function printStats() {
   const { loadConfig, api } = await import(pathToFileURL(path.join(PLUGIN, 'lib', 'client.mjs')).href);
   let s;
@@ -172,7 +200,12 @@ Team (works from any shell, no agent needed)
   batcave board [--mine]             batcave people
   batcave task <title>               batcave claim <id> [--force]
   batcave release <id>               batcave status <id> <backlog|claimed|running|review|done>
-  batcave room [room]                batcave say <message>
+  batcave room [room]                read a room   batcave say <message>
+  batcave room new <name> [@handle ...] [--branch B]
+  batcave room join <room> [--slice "src/x/**"] [--name label] [--here]
+  batcave room invite|rename|show|leave <room> ...
+  batcave room set <room> [--branch B --test CMD --dev CMD --preview URL --env A,B --rules TEXT --card T-12]
+  batcave room slice <paths...> [--room R] [--name label]
   batcave decide <decision> [--pattern RE]   batcave decisions
   batcave check <plan or code>       checks it against pinned decisions
   batcave auto-weigh-in <on|off>     let Alfred bring your agent into rooms
@@ -272,7 +305,24 @@ switch (cmd) {
   case 'claim': if (!rest[0]) die('Usage: batcave claim <id>'); await run('batcave_claim', { task: rest[0], force: Boolean(flags.force) }); break;
   case 'release': if (!rest[0]) die('Usage: batcave release <id>'); await run('batcave_release', { task: rest[0] }); break;
   case 'status': if (rest.length < 2) die('Usage: batcave status <id> <status>'); await run('batcave_task_status', { task: rest[0], status: rest[1] }); break;
-  case 'room': await run('batcave_room_read', { room: rest[0] }); break;
+  case 'room': {
+    const sub = rest[0];
+    const val = (k) => (typeof flags[k] === 'string' ? flags[k] : undefined);
+    if (sub === 'new') { if (!rest[1]) die('Usage: batcave room new <name> [@handle ...] [--branch B]'); await run('batcave_room', { action: 'new', name: rest[1], members: rest.slice(2), branch: val('branch') }); break; }
+    if (sub === 'rename') { if (rest.length < 3) die('Usage: batcave room rename <room> <new name>'); await run('batcave_room', { action: 'rename', room: rest[1], name: rest.slice(2).join(' ') }); break; }
+    if (sub === 'invite') { if (rest.length < 3) die('Usage: batcave room invite <room> @handle ...'); await run('batcave_room', { action: 'invite', room: rest[1], members: rest.slice(2) }); break; }
+    if (sub === 'leave') { await run('batcave_room', { action: 'leave', room: rest[1] }); break; }
+    if (sub === 'show') { await run('batcave_room', { action: 'show', room: rest[1] }); break; }
+    if (sub === 'slice') { if (!rest[1]) die('Usage: batcave room slice <paths...> [--room R] [--name label]'); await run('batcave_room', { action: 'slice', room: val('room'), slice: rest.slice(1).join(' '), name: val('name') }); break; }
+    if (sub === 'set') {
+      if (!rest[1]) die('Usage: batcave room set <room> [--branch B] [--setup CMD] [--dev CMD] [--test CMD] [--preview URL] [--lint CMD] [--env A,B] [--rules TEXT] [--card T-12]');
+      await run('batcave_room', { action: 'set', room: rest[1], branch: val('branch'), setup: val('setup'), dev: val('dev'), test: val('test'), preview: val('preview'), lint: val('lint'), env: val('env'), rules: val('rules'), add_task: val('card') });
+      break;
+    }
+    if (sub === 'join') { if (!rest[1]) die('Usage: batcave room join <room> [--slice "src/x/**"] [--name label] [--here]'); await roomJoin(rest[1]); break; }
+    await run('batcave_room_read', { room: sub });
+    break;
+  }
   case 'say': if (!rest.length) die('Usage: batcave say <message>'); await run('batcave_say', { text: rest.join(' ') }); break;
   case 'decide': if (!rest.length) die('Usage: batcave decide <decision>'); await run('batcave_decide', { text: rest.join(' '), pattern: typeof flags.pattern === 'string' ? flags.pattern : undefined }); break;
   case 'auto-weigh-in': {

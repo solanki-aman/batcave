@@ -98,6 +98,9 @@ table.lat td:first-child,table.lat th:first-child{text-align:left;color:var(--mu
 .days div{flex:1;max-width:40px;display:flex;flex-direction:column;justify-content:flex-end;gap:1px;min-width:10px}
 .days span{display:block}
 .suggest{margin-top:6px}
+.roomcard{border:1px solid var(--line);border-left:2px solid var(--cy);background:rgba(124,207,220,.025);padding:12px 14px;display:flex;flex-direction:column;gap:6px;margin-bottom:6px}
+.roomcard .kv{display:grid;grid-template-columns:80px minmax(0,1fr);gap:10px;font-size:12px}
+.roomcard .kv>span:first-child{color:var(--dim)}
 </style>
 </head>
 <body>
@@ -195,10 +198,31 @@ function renderPeople(){
     </article>`;}).join('')}</div>`;
 }
 
+function roomCard(r){
+  if (!r || r.id==='team') return '';
+  const me = ls.get('uid'); const member = r.members.includes(me);
+  const run = Object.entries(r.run||{}).filter(([k,v])=>v&&v.length);
+  return `<section class="roomcard" aria-label="Room details">
+    <div class="row" style="justify-content:space-between"><div><b>#${esc(r.name)}</b> <span class="meta">${esc(r.id)}${r.tasks?.length?' · '+esc(r.tasks.join(', ')):''}</span></div>
+      <div class="row">${member?`<button class="btn small" data-rename="${esc(r.id)}">rename</button>`:`<button class="btn small primary" data-join="${esc(r.id)}">join</button>`}</div></div>
+    <div class="kv"><span>branch</span><span class="mono">${esc(r.branch||'not set')}</span></div>
+    <div class="kv"><span>members</span><span>${r.members.map(m=>`${esc(nameOf(m))}${r.slices?.[m]?` <span class="mono">${esc(r.slices[m].name||r.slices[m].paths.join(' '))}</span>`:''}`).join(' · ')||'none'}</span></div>
+    ${run.map(([k,v])=>`<div class="kv"><span>${esc(k)}</span><span class="mono">${esc(Array.isArray(v)?v.join(', '):v)}</span></div>`).join('')}
+    ${r.rules?`<div class="kv"><span>rules</span><span style="white-space:pre-wrap">${esc(r.rules)}</span></div>`:''}
+    ${r.pushes?.length?`<div class="kv"><span>pushes</span><span class="mono">${r.pushes.slice(-3).reverse().map(p=>`${esc(nameOf(p.by))} ${esc(p.sha.slice(0,7))} · ${p.files.length} files · ${ago(p.at)}`).join('<br>')}</span></div>`:''}
+    ${member?`<form class="row" data-invite="${esc(r.id)}"><label class="sr" for="inv">Invite</label><input id="inv" placeholder="invite @handle" style="flex:1"><button class="btn small" type="submit">invite</button></form>`:''}
+  </section>`;
+}
+
 function renderRooms(){
   const rooms = S.state.rooms;
-  return `<div class="rooms"><nav class="roomlist" aria-label="Rooms">${rooms.map(r=>`<button data-room="${esc(r.id)}" aria-current="${r.id===S.room}">#${esc(r.name)}</button>`).join('')}</nav>
+  const me = ls.get('uid');
+  const mine = rooms.filter(r=>r.id==='team'||r.members?.includes(me)), others = rooms.filter(r=>!mine.includes(r));
+  const item = (r)=>`<button data-room="${esc(r.id)}" aria-current="${r.id===S.room}">#${esc(r.name)}</button>`;
+  return `<div class="rooms"><nav class="roomlist" aria-label="Rooms">${mine.map(item).join('')}${others.length?`<div class="meta" style="padding:8px 10px 2px">other rooms</div>${others.map(item).join('')}`:''}
+      <form id="newRoom" class="row" style="padding:8px 4px 2px"><label class="sr" for="nr">New room</label><input id="nr" placeholder="new room" style="flex:1;min-width:0"></form></nav>
     <section class="msgs" aria-label="#${esc(S.room)}">
+      ${roomCard(rooms.find(r=>r.id===S.room))}
       ${S.messages.map(m=>m.meta?.invocation!=null?alfredMsg(m):`<div class="msg ${esc(m.kind)}">${m.kind==='event'?`${esc(nameOf(m.author))} ${esc(m.text)} · ${ago(m.at)}`:`<span class="author">${esc(nameOf(m.author))}${m.kind==='agent'?"'s agent":''}</span> <span class="meta">${ago(m.at)}</span><div>${esc(m.text)}</div>${m.meta && m.meta.suggestPin && !m.meta.pinned ? `<button class="btn small suggest" data-pin="${m.id}">Pin as decision</button>` : ''}`}</div>`).join('') || '<p class="empty">No messages yet.</p>'}
       <form id="say" class="row" style="margin-top:auto"><label class="sr" for="sayInput">Message #${esc(S.room)}</label><input id="sayInput" placeholder="Message #${esc(S.room)} · @alfred brings in your agent · @name-agent asks theirs" style="flex:1"><button class="btn primary" type="submit">Send</button></form>
     </section></div>`;
@@ -259,6 +283,10 @@ document.addEventListener('click', async (e) => {
   if (r) { S.room = r.dataset.room; return refresh(); }
   const pin = e.target.closest('[data-pin]');
   if (pin) { const m = S.messages.find(x => String(x.id) === pin.dataset.pin); if (m) await api('POST','/api/decisions',{ text: m.text, room: m.room, fromMessage: m.id }); return refresh(); }
+  const jn = e.target.closest('[data-join]');
+  if (jn) { await api('POST', `/api/rooms/${jn.dataset.join}/join`, {}); return refresh(); }
+  const rn = e.target.closest('[data-rename]');
+  if (rn) { const name = prompt('New room name'); if (name && name.trim()) await api('POST', `/api/rooms/${rn.dataset.rename}/rename`, { name }); return refresh(); }
   const fb = e.target.closest('[data-fb]');
   if (fb) { await api('POST', `/api/messages/${fb.dataset.fb}/feedback`, { helpful: fb.dataset.helpful === '1' }); return refresh(); }
   const au = e.target.closest('[data-auto]');
@@ -275,6 +303,8 @@ document.addEventListener('submit', async (e) => {
     if (f.id === 'newTask') { const v = document.getElementById('nt').value; if (v.trim()) await api('POST','/api/tasks',{ title:v, source:'web' }); }
     if (f.id === 'say') { const v = document.getElementById('sayInput').value; if (v.trim()) await api('POST',`/api/rooms/${encodeURIComponent(S.room)}/messages`,{ text:v }); }
     if (f.id === 'decide') { const v = document.getElementById('dec').value; if (v.trim()) await api('POST','/api/decisions',{ text:v }); }
+    if (f.id === 'newRoom') { const v = document.getElementById('nr').value; if (v.trim()) { const r = await api('POST','/api/rooms',{ name:v }); S.room = r.id; } }
+    if (f.dataset.invite) { const v = f.querySelector('input').value; if (v.trim()) await api('POST',`/api/rooms/${f.dataset.invite}/invite`,{ members: v }); }
     if (f.dataset.ask) { const v = f.querySelector('input').value; if (v.trim()) await api('POST','/api/requests',{ to:f.dataset.ask, text:v }); }
   } catch (err) { alertBox(err.message); }
   refresh();
@@ -289,7 +319,7 @@ function connect(){
   if (ls.get('uid')) {
     es = new EventSource('/api/stream?token=' + encodeURIComponent(ls.get('utoken')));
     let t; const later = () => { clearTimeout(t); t = setTimeout(refresh, 150); };
-    ['task','person','message','decision','request','handoff'].forEach(ev => es.addEventListener(ev, later));
+    ['task','person','message','decision','request','handoff','room'].forEach(ev => es.addEventListener(ev, later));
   }
   refresh();
 }

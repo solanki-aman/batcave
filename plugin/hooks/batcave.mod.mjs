@@ -26,7 +26,7 @@ const POLL_MS = 15000;
 const HOLD_LIMIT_MS = 10 * 60 * 1000;
 const POLL_SECONDS = "0.25";
 const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
-const TABS = ["Board", "Team", "Requests", "Stats"];
+const TABS = ["Board", "Room", "Team", "Requests", "Stats"];
 const LANES = [["backlog", "Backlog"], ["claimed", "Claimed"], ["running", "Running"], ["review", "Review"], ["done", "Done"]];
 
 const state = {
@@ -38,7 +38,8 @@ const state = {
   tab: 0,
   paneOpen: false,
   paneInBand: false,
-  seen: { requests: new Set(), handoffs: new Set(), decisions: new Set() },
+  seen: { requests: new Set(), handoffs: new Set(), decisions: new Set(), invites: new Set() },
+  sync: null,         // { room, name, branch, onBranch, behind: [pushes] } for the room you work in
   invoked: new Set(), // @alfred requests this session already took
   busy: false,        // a main-loop turn is running; Alfred waits for it to end
   primed: false,
@@ -86,30 +87,36 @@ export function register(on) {
     let verdict = null;
     const hint = String(e.new_string ?? e.content ?? e.new_source ?? (Array.isArray(e.edits) ? e.edits.map((x) => x.new_string ?? "").join("\n") : "")).slice(0, 600);
     try {
-      const g = await api($, "GET", `/api/guard?files=${encodeURIComponent(file)}${hint ? `&change=${encodeURIComponent(hint)}` : ""}`);
+      const branch = await gitOut($, ["rev-parse", "--abbrev-ref", "HEAD"]);
+      const g = await api($, "GET", `/api/guard?files=${encodeURIComponent(file)}${hint ? `&change=${encodeURIComponent(hint)}` : ""}&branch=${encodeURIComponent(branch)}`);
       touches = g && g.conflict ? g.touches : [];
       verdict = g;
     } catch {
       return next(e); // fail open: a missing server never blocks an edit
     }
     const breaks = verdict?.breaks ?? [];
+    const slices = verdict?.slices ?? [];
+    const behind = [];
+    for (const p of (verdict?.upstream ?? []).slice(0, 5)) {
+      if (!(await hasCommit($, p.sha))) behind.push(p);
+    }
     if (touches.length > 0 && verdict.severity === "low") {
       // Alfred judged the overlap trivial: mention it, and only hold for a broken decision
       $.ui.toast(`Batcave · ${touches[0].name} also touched ${file}; overlap looks trivial`);
       touches = [];
     }
-    if (touches.length === 0 && breaks.length === 0) {
+    if (touches.length === 0 && breaks.length === 0 && slices.length === 0 && behind.length === 0) {
       return next(e);
     }
     while (state.held !== null) {
       if (next.signal.aborted) return { deny: "Batcave held this edit: the turn was interrupted. Do not retry unless the user asks." };
       await $.process.run(["sleep", POLL_SECONDS], { timeoutMs: 5000 });
     }
-    const mine = { file, touches, breaks, decision: null, where: "pane" };
+    const mine = { file, touches, breaks, slices, behind, decision: null, where: "pane" };
     state.held = mine;
     let opened = { isPlaced: false };
     try {
-      opened = await $.ui.open({ id: GUARD_ID, title: "Batcave guard", focus: true, rows: 9 + Math.min(4, touches.length) + Math.min(3, breaks.length) * 2 });
+      opened = await $.ui.open({ id: GUARD_ID, title: "Batcave guard", focus: true, rows: 9 + Math.min(4, touches.length) + Math.min(3, breaks.length) * 2 + Math.min(2, slices.length) + Math.min(2, behind.length) });
       mine.where = opened.isPlaced ? "pane" : "band";
       $.ui.invalidate("ui.render");
       const startedAt = await $.clock.now();
@@ -124,6 +131,9 @@ export function register(on) {
       try { if (opened.isPlaced) await $.ui.close({ id: GUARD_ID }); } catch { /* already closed */ }
       if (state.held === mine) state.held = null;
       $.ui.invalidate("ui.render");
+    }
+    if (mine.decision === "pull") {
+      mine.pulled = await pullBranch($);
     }
     if (mine.decision === "proceed" || mine.decision === "cancel") {
       const outcomes = [];
@@ -140,9 +150,16 @@ export function register(on) {
     const reasons = [];
     if (touches.length) reasons.push(`${touches.map((t) => `${t.name}'s agent (${t.task ?? "no task"})`).join(", ")} edited it recently`);
     if (breaks.length) reasons.push(`it breaks the team decision ${breaks.map((b) => `"${b.text}" (D-${b.id})`).join(" and ")}`);
-    const fix = breaks.length && !touches.length
-      ? "Rework the change so it follows the decision, or ask the user whether the decision should change."
-      : "Coordinate with them first (batcave_say in their task room, or batcave_request). Do not retry unless the user asks.";
+    if (behind.length) reasons.push(`${behind.map((p) => p.name).join(" and ")} pushed a newer version to the shared branch`);
+    if (slices.length) reasons.push(`it is in ${slices.map((x) => `${x.name}'s slice (${x.slice})`).join(" and ")} of #${slices[0].roomName}`);
+    if (mine.decision === "pull") {
+      return { deny: `Batcave pulled the latest shared branch before this edit to ${file}${mine.pulled ? "" : ", but the pull needs attention: finish it first (resolve conflicts, then git rebase --continue)"}. Re-read ${file} and redo the change on top of ${behind.map((p) => p.name).join(" and ")}'s work.` };
+    }
+    const fix = slices.length
+      ? `Ask ${slices[0].name} in #${slices[0].roomName} before changing their slice, or ask the user. Do not retry unless the user asks.`
+      : breaks.length && !touches.length
+        ? "Rework the change so it follows the decision, or ask the user whether the decision should change."
+        : "Coordinate with them first (batcave_say in their task room, or batcave_request). Do not retry unless the user asks.";
     return { deny: `Batcave guard held this edit to ${file}: ${reasons.join(", and ")}, and ${why}. ${fix}` };
   });
 
@@ -217,6 +234,7 @@ async function refresh($) {
     state.stats = stats;
     state.error = "";
     await announce($, team);
+    state.sync = await syncState($, team);
     await runAsked($, team);
     await $.process.run(["sh", "-c", 'd="${BATCAVE_HOME:-$HOME/.batcave}"; mkdir -p "$d" && date +%s > "$d/mod-active"'], { timeoutMs: 3000 });
   } catch (err) {
@@ -255,6 +273,10 @@ async function announce($, team) {
   }
   for (const h of team.handoffs.filter((x) => x.to === me)) {
     if (!state.seen.handoffs.has(h.id)) { state.seen.handoffs.add(h.id); fresh.push({ kind: "handoff", text: `${nameOf(h.from)} handed you ${h.task}`, room: "" }); }
+  }
+  for (const r of team.rooms.filter((x) => x.invites?.[me])) {
+    const key = `${r.id}:${r.invites[me].at}`;
+    if (!state.seen.invites.has(key)) { state.seen.invites.add(key); fresh.push({ kind: "request", text: `${nameOf(r.invites[me].by)} added you to #${r.name}`, room: r.id }); }
   }
   for (const d of team.decisions) {
     if (!state.seen.decisions.has(d.id)) { state.seen.decisions.add(d.id); if (d.author !== me) fresh.push({ kind: "decision", text: `New decision from ${nameOf(d.author)}: ${d.text}`, room: d.room }); }
@@ -303,6 +325,63 @@ async function answer($, req, action) {
     $.ui.toast(`Batcave · ${String(err?.message ?? err).slice(0, 120)}`);
   }
   await refresh($);
+}
+
+// The room you work in: the one you joined last, else your active task's.
+function focusRoom(team) {
+  const me = state.cfg.user;
+  const p = team.people.find((x) => x.id === me);
+  const joined = p?.room && team.rooms.find((r) => r.id === p.room && r.members?.includes(me));
+  if (joined) return joined;
+  const t = team.tasks.find((x) => x.owner === me && (x.status === "claimed" || x.status === "running"));
+  return t ? team.rooms.find((r) => r.id === t.room) ?? null : null;
+}
+
+// Is this checkout behind teammates' pushes to the room's branch? Checked locally, no fetch.
+async function syncState($, team) {
+  const room = focusRoom(team);
+  if (!room?.branch) return room ? { room: room.id, name: room.name, branch: null, onBranch: false, behind: [] } : null;
+  const branch = await gitOut($, ["rev-parse", "--abbrev-ref", "HEAD"]);
+  const behind = [];
+  if (branch === room.branch) {
+    for (const p of (room.pushes ?? []).filter((x) => x.by !== state.cfg.user).slice(-5)) {
+      if (!(await hasCommit($, p.sha))) behind.push(p);
+    }
+  }
+  return { room: room.id, name: room.name, branch: room.branch, onBranch: branch === room.branch, behind };
+}
+
+// ---- git, in the session's checkout -------------------------------------------
+
+async function gitOut($, args) {
+  try {
+    const r = await $.process.run(["git", ...args], { cwd: state.root || undefined, timeoutMs: 3000 });
+    return r.exitCode === 0 ? String(r.stdout).trim() : "";
+  } catch {
+    return "";
+  }
+}
+
+// Is this commit already in the local checkout? Unknown commits count as no.
+async function hasCommit($, sha) {
+  try {
+    const r = await $.process.run(["git", "merge-base", "--is-ancestor", sha, "HEAD"], { cwd: state.root || undefined, timeoutMs: 3000 });
+    return r.exitCode === 0;
+  } catch {
+    return true; // cannot tell: do not hold the edit for it
+  }
+}
+
+async function pullBranch($) {
+  const r = await $.process.run(["git", "pull", "--rebase", "--autostash"], { cwd: state.root || undefined, timeoutMs: 60000 });
+  if (r.exitCode === 0) {
+    $.ui.toast("Batcave · pulled the shared branch");
+    await refresh($);
+    return true;
+  }
+  $.ui.toast("Batcave · pull needs attention; asking Claude to finish it");
+  await $.prompt.submit({ text: `Batcave tried to pull the room's shared branch and git said:\n${String(r.stderr || r.stdout).slice(0, 800)}\nFinish the pull (resolve conflicts if any, keep both sides' intent), then summarize what changed upstream.` });
+  return false;
 }
 
 async function setAuto($, on) {
@@ -386,6 +465,8 @@ function band($, t, columns) {
     Text({ key: "on", color: C.mut, children: `${online} online` }),
   ];
   if (reqs) parts.push(sep(Text, "s2"), Text({ key: "req", color: C.amb, children: `${reqs} request${reqs > 1 ? "s" : ""}` }));
+  const sync = state.sync;
+  if (sync?.behind.length) parts.push(sep(Text, "s6"), Text({ key: "sync", children: [Text({ key: "a", color: C.mut, children: `#${sync.name} ` }), Text({ key: "b", color: C.amb, children: `↓${sync.behind.length} · ${[...new Set(sync.behind.map((p) => nameOf(p.by).toLowerCase()))].join(", ")} pushed` })] }));
   if (offer) parts.push(sep(Text, "s5"), Text({ key: "offer", children: [Text({ key: "a", color: C.dim, children: "alfred › " }), Text({ key: "b", color: C.amb, children: `#${offer.room} could use your agent` })] }));
   parts.push(sep(Text, "s3"));
   if (suggestion) {
@@ -396,7 +477,7 @@ function band($, t, columns) {
     parts.push(Text({ key: "mine", color: C.dim, children: "no claim" }));
   }
   // optional segments, added while they fit: teammates' agents, then savings
-  const buttonCols = (suggestion ? 14 : 0) + (offer ? 14 : 0) + 18 + (reqs ? 12 : 0);
+  const buttonCols = (suggestion ? 14 : 0) + (offer ? 14 : 0) + (sync?.behind.length ? 8 : 0) + 18 + (reqs ? 12 : 0);
   let used = 30 + (reqs ? 13 : 0) + (offer ? 24 + offer.room.length : 0) + (suggestion ? 14 + suggestion.title.length : mine ? 16 : 11);
   for (const p of busy) {
     const now = fit(p.now || "working", 30).trimEnd();
@@ -408,11 +489,12 @@ function band($, t, columns) {
   if (saved && used + 18 <= columns - buttonCols) parts.push(sep(Text, "s4"), Text({ key: "saved", color: C.dim, children: `${short(saved)} tok saved` }));
 
   const buttons = columns >= 90 ? [
+    ...(sync?.behind.length ? [Button({ key: "pull", label: "pull", hotkey: "p", variant: offer || suggestion ? "secondary" : "primary", onPress: () => pullBranch($) })] : []),
     ...(offer ? [Button({ key: "offer", label: "weigh in", hotkey: "w", variant: "primary", onPress: () => answer($, offer, "accept") })] : []),
     ...(suggestion ? [Button({ key: "suggest", label: `claim ${suggestion.task}`, hotkey: "c", variant: suggestion && !offer ? "primary" : "secondary", onPress: () => claim($, suggestion.task) })] : []),
     Button({ key: "board", label: "board", hotkey: "b", plain: true, dimColor: true, onPress: () => openPane($, 0) }),
-    Button({ key: "team", label: "team", hotkey: "t", plain: true, dimColor: true, onPress: () => openPane($, 1) }),
-    ...(reqs ? [Button({ key: "requests", label: "requests", hotkey: "q", plain: true, onPress: () => openPane($, 2) })] : []),
+    Button({ key: "team", label: "team", hotkey: "t", plain: true, dimColor: true, onPress: () => openPane($, 2) }),
+    ...(reqs ? [Button({ key: "requests", label: "requests", hotkey: "q", plain: true, onPress: () => openPane($, 3) })] : []),
   ] : [];
   return Box({ flexDirection: "row", paddingX: 1, gap: 2, children: [Box({ key: "line", flexDirection: "row", flexShrink: 1, children: parts }), ...buttons] });
 }
@@ -433,8 +515,9 @@ function paneView($, t, e, inBand) {
   let body;
   if (!state.team) body = [Text({ key: "x", color: C.dim, children: state.error || "loading" })];
   else if (state.tab === 0) body = boardTab($, t, inBand ? Math.max(4, (e.maxRows || 16) - 6) : 14, width);
-  else if (state.tab === 1) body = teamTab($, t, width);
-  else if (state.tab === 2) body = requestsTab($, t, width);
+  else if (state.tab === 1) body = roomTab($, t, width);
+  else if (state.tab === 2) body = teamTab($, t, width);
+  else if (state.tab === 3) body = requestsTab($, t, width);
   else body = statsTab(t, width);
   return Box({
     flexDirection: "column", borderStyle: "single", borderColor: C.line, paddingX: 1,
@@ -483,6 +566,49 @@ function boardTab($, t, rows, width) {
     }
   }
   return out.slice(0, rows + 5);
+}
+
+function roomTab($, t, width) {
+  const { Box, Text, Button } = t;
+  const room = focusRoom(state.team);
+  if (!room) return [
+    rule(Text, "h", "ROOM", undefined, width),
+    Text({ key: "n", color: C.dim, children: "   not in a room yet" }),
+    Text({ key: "m", color: C.dim, children: "   claim a card, or: batcave room join <room> [--slice 'src/x/**']" }),
+  ];
+  const me = state.cfg.user;
+  const sync = state.sync;
+  const out = [rule(Text, "h", `#${room.name}`.toUpperCase(), room.members.length, width)];
+  const status = !room.branch ? Text({ key: "s", color: C.dim, children: "no shared branch yet" })
+    : !sync?.onBranch ? Text({ key: "s", color: C.dim, children: "this checkout is on another branch" })
+      : sync.behind.length ? Text({ key: "s", color: C.amb, children: `↓${sync.behind.length} behind` })
+        : Text({ key: "s", color: C.ok, children: "up to date" });
+  out.push(Box({ key: "br", flexDirection: "row", justifyContent: "space-between", children: [
+    Text({ key: "l", wrap: "truncate-end", children: [Text({ key: "a", color: C.mut, children: " branch " }), Text({ key: "b", color: C.fg, children: room.branch ?? "-" }), Text({ key: "c", color: C.line, children: "  " }), status] }),
+    ...(sync?.behind.length ? [Button({ key: "p", label: "pull", hotkey: "p", plain: true, onPress: () => pullBranch($) })] : []),
+  ] }));
+  if (room.tasks?.length) out.push(Text({ key: "cards", children: [Text({ key: "a", color: C.mut, children: " cards  " }), Text({ key: "b", color: C.fg, children: room.tasks.join("  ") })] }));
+  out.push(rule(Text, "hm", "MEMBERS", undefined, width));
+  for (const id of room.members) {
+    const p = state.team.people.find((x) => x.id === id);
+    const s = room.slices?.[id];
+    const live = p && (p.presence === "agent running" ? C.cy : p.presence === "online" ? C.ok : C.dim);
+    out.push(Text({ key: `m-${id}`, wrap: "truncate-end", children: [
+      Text({ key: "d", color: live || C.dim, children: " ● " }),
+      Text({ key: "n", color: C.fg, children: fit(`${p?.name ?? id}${id === me ? " (you)" : ""}`, 15) }),
+      Text({ key: "s", color: s ? C.mut : C.dim, children: s ? `${s.name ? `${s.name} · ` : ""}${s.paths.join(" ")}` : "no slice" }),
+    ] }));
+  }
+  const run = Object.entries(room.run ?? {}).filter(([k, v]) => v && (k !== "env" || v.length));
+  if (run.length) {
+    out.push(rule(Text, "hr", "RUN AND TEST", undefined, width));
+    for (const [k, v] of run) out.push(Text({ key: `r-${k}`, wrap: "truncate-end", children: [Text({ key: "a", color: C.dim, children: ` ${fit(k, 8)}` }), Text({ key: "b", color: C.fg, children: Array.isArray(v) ? v.join(" ") : v })] }));
+  }
+  if (room.rules) {
+    out.push(rule(Text, "hu", "RULES", undefined, width));
+    for (const [i, line] of room.rules.split("\n").slice(0, 6).entries()) out.push(Text({ key: `u-${i}`, color: C.mut, wrap: "truncate-end", children: ` ${line}` }));
+  }
+  return out;
 }
 
 function teamTab($, t, width) {
@@ -601,6 +727,17 @@ function guardView(t, held) {
         Text({ key: "b", color: C.mut, children: `'s agent edited it ${ago(x.at)}${x.task ? ` on ${x.task}` : ""}` }),
       ] })),
       ...(held.touches.length ? [Text({ key: "q", color: C.dim, children: "  editing now may overwrite their work" })] : []),
+      ...(held.behind ?? []).slice(0, 2).map((p, i) => Text({ key: `u${i}`, children: [
+        Text({ key: "a", color: C.line, children: "  └ " }),
+        Text({ key: "n", color: C.amb, children: p.name.toLowerCase() }),
+        Text({ key: "b", color: C.mut, children: ` pushed a newer version ${ago(p.at)} · ${p.sha.slice(0, 7)} · you are behind` }),
+      ] })),
+      ...(held.slices ?? []).slice(0, 2).map((x, i) => Text({ key: `s${i}`, children: [
+        Text({ key: "a", color: C.line, children: "  └ " }),
+        Text({ key: "b", color: C.mut, children: "in " }),
+        Text({ key: "n", color: C.amb, children: `${x.name.toLowerCase()}'s slice` }),
+        Text({ key: "c", color: C.dim, children: ` · ${x.slice} · #${x.roomName}` }),
+      ] })),
       ...(held.breaks ?? []).slice(0, 3).map((b, i) => Box({ key: `d${i}`, flexDirection: "column", children: [
         Text({ key: "h", children: [
           Text({ key: "a", color: C.line, children: "  └ " }),
@@ -611,7 +748,8 @@ function guardView(t, held) {
         Text({ key: "t", color: C.fg, wrap: "truncate-end", children: `    "${b.text}"` }),
       ] })),
       Box({ key: "buttons", marginTop: 1, gap: 3, children: [
-        Button({ key: "cancel", label: held.touches.length ? "cancel and ask them" : "cancel and rework", hotkey: "2", autoFocus: true, variant: "primary", onPress: decide("cancel") }),
+        ...((held.behind ?? []).length ? [Button({ key: "pull", label: "pull first", hotkey: "3", autoFocus: true, variant: "primary", onPress: decide("pull") })] : []),
+        Button({ key: "cancel", label: held.touches.length || (held.slices ?? []).length ? "cancel and ask them" : "cancel and rework", hotkey: "2", autoFocus: !(held.behind ?? []).length, variant: (held.behind ?? []).length ? "secondary" : "primary", onPress: decide("cancel") }),
         Button({ key: "proceed", label: "proceed", hotkey: "1", plain: true, dimColor: true, onPress: decide("proceed") }),
       ] }),
     ],
