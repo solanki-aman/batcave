@@ -75,7 +75,8 @@ All `/api/*` routes except `/api/health` need `Authorization: Bearer <team token
 | GET | `/api/rooms/:id/messages` | `?limit=` | Recent messages. |
 | POST | `/api/rooms/:id/messages` | `text`, `kind` | Post. `@handle-agent` creates a request; `@team-agent` routes it. |
 | GET | `/api/decisions` | `?room=` | Active decisions. |
-| POST | `/api/decisions` | `text`, `room`, `fromMessage` | Pin a decision. |
+| POST | `/api/decisions` | `text`, `room`, `pattern`, `fromMessage` | Pin a decision. `pattern` is an optional regex for changes that break it. |
+| POST | `/api/decisions/check` | `text`, `file` | Pinned decisions a plan or change would break. |
 | POST | `/api/decisions/:id/retire` | | Retire a decision. |
 | GET | `/api/requests` | `?box=inbox\|sent&status=` | Your requests. |
 | POST | `/api/requests` | `to` (handle or `auto`), `text`, `room` | Ask a teammate's agent. |
@@ -85,7 +86,7 @@ All `/api/*` routes except `/api/health` need `Authorization: Bearer <team token
 | GET | `/api/handoffs` | | Open handoffs to or from you. |
 | POST | `/api/handoffs/:id/pickup` | | Recipient only. Returns the packet. |
 | POST | `/api/events` | `type`, `files`, `hint`, `command`, `summary`, `branch`, `url` | Activity from hooks: `turn_start`, `turn_end`, `edit`, `command`, `commit`, `pr`. |
-| GET | `/api/guard` | `?files=a,b&minutes=&change=` | Recent edits by others to these files, with `severity` (`low` or `real`). |
+| GET | `/api/guard` | `?files=a,b&minutes=&change=` | Recent edits by others to these files, with `severity` (`low` or `real`), and `breaks`: decisions the change goes against. |
 | GET | `/api/context` | | The context bundle injected into agents, with ready-to-use `text`. |
 | POST | `/api/notify-filter` | `items: [{kind, text, room}]` | Which events deserve a toast. |
 | POST | `/api/feedback` | `id`, `outcome` | Outcome of an Alfred suggestion. |
@@ -140,7 +141,7 @@ batcave/
 │   ├── scripts/statusline.mjs        # status line, cached 10 s
 │   ├── lib/agents.mjs                # per-agent payload and reply adapters
 │   ├── lib/hookcore.mjs              # agent-independent hook logic
-│   ├── lib/tools.mjs                 # the 18 tools, shared by MCP and the CLI
+│   ├── lib/tools.mjs                 # the 19 tools, shared by MCP and the CLI
 │   └── lib/client.mjs                # config and HTTP client
 ├── server/
 │   ├── src/index.mjs                 # HTTP API, SSE, domain logic
@@ -163,6 +164,7 @@ Batcave can use [Julia-1](https://huggingface.co/SupersonicLabs/Julia-1), an ope
 | Card matching | choice among backlog cards, or none | With no claim, a prompt that matches a card adds "looks like T-9" to the context and a Claim button to the mod band. |
 | Duplicates | yes/no per open card | A new task that repeats an open one is flagged `possibleDuplicate` and badged on the board. |
 | Guard sorting | yes/no: could these changes conflict? | Trivial overlaps (imports, unrelated hunks) pass with a note instead of a stop. |
+| Decision check | yes/no per pinned decision: does this change go against it? | An edit that breaks a decision is held like a guard conflict, with the decision quoted. Only answers at 0.7 or above count (`BATCAVE_DECISION_BAR`). A decision pinned with a `pattern` regex is checked on every edit, with or without Alfred. |
 | Request routing | choice among teammates, from claims, roles and recent files | `to: "auto"`, `batcave ask team ...` and `@team-agent` send the ask to the best-placed teammate. |
 | Commit linking | branch first, then a choice among your open cards | Commits land in the right card's room, even on `main`. |
 | Paused claims | yes/no: did the owner say they will come back? | A quiet claim whose owner said "back Monday" is marked paused instead of stale. Swept every 10 minutes. |

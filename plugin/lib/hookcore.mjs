@@ -89,16 +89,24 @@ export async function handle(ev, { canAsk = true } = {}) {
       const files = ev.files.map((f) => relPath(f, cfg.root));
       const change = ev.hint ? `&change=${encodeURIComponent(ev.hint)}` : '';
       const g = await api(cfg, 'GET', `/api/guard?files=${encodeURIComponent(files.join(','))}&minutes=${cfg.guardMinutes}${change}`);
-      if (!g.conflict) return {};
-      const who = g.touches.map((t) => `${t.name}'s agent edited ${t.file} ${ago(t.at)}${t.task ? ` (${t.task})` : ''}`).join('; ');
-      // Alfred judged the overlap trivial: let the edit through and just mention it
-      if (g.severity === 'low') return { context: `Batcave: ${who}. The overlap looks trivial, so the edit went ahead. Mention it to the user if it matters.` };
-      if (canAsk) {
-        return { guard: { mode: 'ask', reason: `Batcave guard: ${who}. Coordinate before editing, or approve to continue.` } };
+      const breaks = g.breaks || [];
+      const realOverlap = g.conflict && g.severity !== 'low';
+      if (!realOverlap && !breaks.length) {
+        if (!g.conflict) return {};
+        // Alfred judged the overlap trivial: let the edit through and just mention it
+        const who = g.touches.map((t) => `${t.name}'s agent edited ${t.file} ${ago(t.at)}`).join('; ');
+        return { context: `Batcave: ${who}. The overlap looks trivial, so the edit went ahead. Mention it to the user if it matters.` };
       }
-      const key = files.join(',');
+      const parts = [];
+      if (realOverlap) parts.push(g.touches.map((t) => `${t.name}'s agent edited ${t.file} ${ago(t.at)}${t.task ? ` (${t.task})` : ''}`).join('; '));
+      if (breaks.length) parts.push(`this change looks like it breaks a team decision: ${breaks.map((b) => `"${b.text}" (D-${b.id}, ${b.author})`).join('; ')}`);
+      const what = parts.join('. Also, ');
+      if (canAsk) {
+        return { guard: { mode: 'ask', reason: `Batcave guard: ${what}. ${breaks.length ? 'Change the edit to follow the decision, or ' : 'Coordinate before editing, or '}approve to continue.` } };
+      }
+      const key = files.join(',') + (breaks.length ? `#d${breaks.map((b) => b.id).join('.')}` : '');
       if (!firstWarning(ev.sessionId, key)) return {};
-      return { guard: { mode: 'deny', reason: `Batcave guard: ${who}. Stop and tell the user before editing. If they say go ahead, retry the same edit and Batcave will allow it.` } };
+      return { guard: { mode: 'deny', reason: `Batcave guard: ${what}. ${breaks.length ? 'Rework the edit so it follows the decision, or stop and tell the user. ' : 'Stop and tell the user before editing. '}If they say go ahead, retry the same edit and Batcave will allow it.` } };
     }
 
     case 'post-tool': {

@@ -23,7 +23,7 @@ The look is deliberately quiet: hairline frames, muted text, cyan only for live 
 | Requests | Asks from teammates for your agent | **Run on my agent** submits the request as your prompt. **Decline** answers it. |
 | Stats | Tokens saved (dedupe and Alfred ranking), hook and Alfred latency (p50 and p95), and how often Alfred's suggestions are taken | |
 
-**The guard pane.** When Claude is about to edit a file another teammate's agent changed recently, the edit is held in a pane:
+**The guard pane.** When Claude is about to edit a file another teammate's agent changed recently, or to write a change that breaks a pinned decision, the edit is held in a pane:
 
 ```text
 ┌──────────────────────────────────────────────────────────┐

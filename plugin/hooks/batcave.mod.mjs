@@ -77,7 +77,7 @@ export function register(on) {
     const file = relPath(state.root, e.file_path ?? e.notebook_path);
     let touches = [];
     let verdict = null;
-    const hint = String(e.new_string ?? e.content ?? e.new_source ?? "").slice(0, 200);
+    const hint = String(e.new_string ?? e.content ?? e.new_source ?? (Array.isArray(e.edits) ? e.edits.map((x) => x.new_string ?? "").join("\n") : "")).slice(0, 600);
     try {
       const g = await api($, "GET", `/api/guard?files=${encodeURIComponent(file)}${hint ? `&change=${encodeURIComponent(hint)}` : ""}`);
       touches = g && g.conflict ? g.touches : [];
@@ -85,23 +85,24 @@ export function register(on) {
     } catch {
       return next(e); // fail open: a missing server never blocks an edit
     }
-    if (touches.length === 0) {
-      return next(e);
+    const breaks = verdict?.breaks ?? [];
+    if (touches.length > 0 && verdict.severity === "low") {
+      // Alfred judged the overlap trivial: mention it, and only hold for a broken decision
+      $.ui.toast(`Batcave · ${touches[0].name} also touched ${file}; overlap looks trivial`);
+      touches = [];
     }
-    if (verdict.severity === "low") {
-      // Alfred judged the overlap trivial: mention it, do not stop the edit
-      $.ui.toast(`Batcave · ${touches[0].name} also touched ${file}; overlap looks trivial, going ahead`);
+    if (touches.length === 0 && breaks.length === 0) {
       return next(e);
     }
     while (state.held !== null) {
       if (next.signal.aborted) return { deny: "Batcave held this edit: the turn was interrupted. Do not retry unless the user asks." };
       await $.process.run(["sleep", POLL_SECONDS], { timeoutMs: 5000 });
     }
-    const mine = { file, touches, decision: null, where: "pane" };
+    const mine = { file, touches, breaks, decision: null, where: "pane" };
     state.held = mine;
     let opened = { isPlaced: false };
     try {
-      opened = await $.ui.open({ id: GUARD_ID, title: "Batcave guard", focus: true, rows: 9 + Math.min(4, touches.length) });
+      opened = await $.ui.open({ id: GUARD_ID, title: "Batcave guard", focus: true, rows: 9 + Math.min(4, touches.length) + Math.min(3, breaks.length) * 2 });
       mine.where = opened.isPlaced ? "pane" : "band";
       $.ui.invalidate("ui.render");
       const startedAt = await $.clock.now();
@@ -117,15 +118,25 @@ export function register(on) {
       if (state.held === mine) state.held = null;
       $.ui.invalidate("ui.render");
     }
-    if (verdict.decisionId && (mine.decision === "proceed" || mine.decision === "cancel")) {
-      try { await api($, "POST", "/api/feedback", { id: verdict.decisionId, outcome: mine.decision === "proceed" ? "proceeded-real" : "cancelled-real" }); } catch { /* best effort */ }
+    if (mine.decision === "proceed" || mine.decision === "cancel") {
+      const outcomes = [];
+      if (verdict.decisionId && touches.length) outcomes.push([verdict.decisionId, mine.decision === "proceed" ? "proceeded-real" : "cancelled-real"]);
+      for (const b of breaks) outcomes.push([b.logId, mine.decision === "proceed" ? "overridden" : "accepted"]);
+      for (const [id, outcome] of outcomes) {
+        try { await api($, "POST", "/api/feedback", { id, outcome }); } catch { /* best effort */ }
+      }
     }
     if (mine.decision === "proceed") {
       return next(e);
     }
-    const who = touches.map((t) => `${t.name}'s agent (${t.task ?? "no task"})`).join(", ");
     const why = { cancel: "the user chose Cancel", timeout: "no answer within 10 minutes", interrupted: "the turn was interrupted" }[mine.decision] ?? "no answer";
-    return { deny: `Batcave guard held this edit to ${file}: ${who} edited it recently, and ${why}. Coordinate with them first (batcave_say in their task room, or batcave_request). Do not retry unless the user asks.` };
+    const reasons = [];
+    if (touches.length) reasons.push(`${touches.map((t) => `${t.name}'s agent (${t.task ?? "no task"})`).join(", ")} edited it recently`);
+    if (breaks.length) reasons.push(`it breaks the team decision ${breaks.map((b) => `"${b.text}" (D-${b.id})`).join(" and ")}`);
+    const fix = breaks.length && !touches.length
+      ? "Rework the change so it follows the decision, or ask the user whether the decision should change."
+      : "Coordinate with them first (batcave_say in their task room, or batcave_request). Do not retry unless the user asks.";
+    return { deny: `Batcave guard held this edit to ${file}: ${reasons.join(", and ")}, and ${why}. ${fix}` };
   });
 
   on("ui.render", { component: "AbovePrompt" }, ($, e, next) => {
@@ -535,9 +546,18 @@ function guardView(t, held) {
         Text({ key: "n", color: C.amb, children: x.name.toLowerCase() }),
         Text({ key: "b", color: C.mut, children: `'s agent edited it ${ago(x.at)}${x.task ? ` on ${x.task}` : ""}` }),
       ] })),
-      Text({ key: "q", color: C.dim, children: "  editing now may overwrite their work" }),
+      ...(held.touches.length ? [Text({ key: "q", color: C.dim, children: "  editing now may overwrite their work" })] : []),
+      ...(held.breaks ?? []).slice(0, 3).map((b, i) => Box({ key: `d${i}`, flexDirection: "column", children: [
+        Text({ key: "h", children: [
+          Text({ key: "a", color: C.line, children: "  └ " }),
+          Text({ key: "b", color: C.mut, children: "breaks " }),
+          Text({ key: "c", color: C.amb, children: `D-${b.id}` }),
+          Text({ key: "d", color: C.dim, children: ` · pinned by ${nameOf(b.author).toLowerCase()}${b.source === "pattern" ? " · pattern" : ""}` }),
+        ] }),
+        Text({ key: "t", color: C.fg, wrap: "truncate-end", children: `    "${b.text}"` }),
+      ] })),
       Box({ key: "buttons", marginTop: 1, gap: 3, children: [
-        Button({ key: "cancel", label: "cancel and ask them", hotkey: "2", autoFocus: true, variant: "primary", onPress: decide("cancel") }),
+        Button({ key: "cancel", label: held.touches.length ? "cancel and ask them" : "cancel and rework", hotkey: "2", autoFocus: true, variant: "primary", onPress: decide("cancel") }),
         Button({ key: "proceed", label: "proceed", hotkey: "1", plain: true, dimColor: true, onPress: decide("proceed") }),
       ] }),
     ],

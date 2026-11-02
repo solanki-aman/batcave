@@ -44,7 +44,7 @@ function hintFrom(args) {
   if (typeof v !== 'string') return '';
   // patches: keep only the added lines
   const added = /^\*\*\* (Begin Patch|Update File|Add File)/m.test(v) ? v.split('\n').filter((l) => l.startsWith('+') && !l.startsWith('+++')).map((l) => l.slice(1)).join('\n') : v;
-  return added.slice(0, 200);
+  return added.slice(0, 600);
 }
 
 function commandFrom(input, args) {

@@ -95,7 +95,7 @@ npx github:solanki-aman/batcave init \
 ```bash
 batcave board
 batcave claim T-14
-batcave decide "Reuse surface tokens. No new colors."
+batcave decide "Reuse surface tokens. No new colors." --pattern '#[0-9a-f]{6}'
 ```
 
 ## Features
@@ -104,7 +104,7 @@ batcave decide "Reuse surface tokens. No new colors."
 |---|---|
 | **Board and claims** | Backlog, Claimed, Agent running, In review, Done. Cards move on their own as agents start work, open PRs and merge. Stale claims can be taken over. |
 | **People** | Who is online, which agent they use, what it is doing now, and the week's shipped work, open PRs and reviews owed. |
-| **Decisions** | Pin a decision once; every teammate's agent receives it as context. |
+| **Decisions** | Pin a decision once; every teammate's agent receives it as context, and edits that break it are held. |
 | **Requests** | Ask a teammate's agent to do something. It runs only if they choose to, in their own session. |
 | **Guard** | Warns before an agent edits a file another teammate's agent changed recently, across vendors. |
 | **Handoff** | Branch, summary, todos and decisions in one packet. The receiver starts with full context. |
@@ -122,7 +122,7 @@ batcave decide "Reuse surface tokens. No new colors."
 - **Server.** One per team. Holds people, tasks, rooms, decisions, requests, handoffs and recent file edits. JSON API, live event stream and dashboard. Zero dependencies.
 - **Claude Code mod.** A hooks module that draws the team band, the `/cave` pane and the guard pane inside Claude Code.
 - **Hooks.** One script serves every agent; small adapters translate each vendor's payloads. They report presence and activity and push team context into the agent. Every hook fails open with a short timeout.
-- **MCP server.** Eighteen tools (`batcave_board`, `batcave_claim`, `batcave_request`, ...) so any agent can read and change shared state.
+- **MCP server.** Nineteen tools (`batcave_board`, `batcave_claim`, `batcave_request`, ...) so any agent can read and change shared state.
 - **CLI.** `batcave init` wires agents up; `batcave board`, `people`, `claim`, `say` and more work from any shell.
 
 See the [walkthrough](docs/walkthrough.md) for five sequence diagrams of a team's day, and the [reference](docs/reference.md) for hooks, configuration and the API.
@@ -147,6 +147,7 @@ Beyond ranking, Alfred makes the small calls a teammate would:
 - **"Looks like T-9."** Start work without a claim and it offers the matching card.
 - **Duplicates.** A new task that repeats an open one gets flagged.
 - **Guard sorting.** Trivial overlaps pass with a note; real ones stop.
+- **Decision check.** An edit that breaks a pinned decision is held with the decision quoted. Pin with `--pattern` for a hard rule that works without Alfred.
 - **Routing.** `batcave ask team ...` or `@team-agent` goes to whoever knows that code.
 - **Commit linking.** Commits land on the right card, even from `main`.
 - **Paused, not stale.** "Back Monday" keeps a claim from going stale.

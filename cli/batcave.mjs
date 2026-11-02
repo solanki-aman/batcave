@@ -173,7 +173,8 @@ Team (works from any shell, no agent needed)
   batcave task <title>               batcave claim <id> [--force]
   batcave release <id>               batcave status <id> <backlog|claimed|running|review|done>
   batcave room [room]                batcave say <message>
-  batcave decide <decision>          batcave decisions
+  batcave decide <decision> [--pattern RE]   batcave decisions
+  batcave check <plan or code>       checks it against pinned decisions
   batcave ask <handle|team> <request>    batcave requests [--sent]
   batcave accept <id>                batcave decline <id>
   batcave handoff <id> <handle> <summary>
@@ -272,7 +273,8 @@ switch (cmd) {
   case 'status': if (rest.length < 2) die('Usage: batcave status <id> <status>'); await run('batcave_task_status', { task: rest[0], status: rest[1] }); break;
   case 'room': await run('batcave_room_read', { room: rest[0] }); break;
   case 'say': if (!rest.length) die('Usage: batcave say <message>'); await run('batcave_say', { text: rest.join(' ') }); break;
-  case 'decide': if (!rest.length) die('Usage: batcave decide <decision>'); await run('batcave_decide', { text: rest.join(' ') }); break;
+  case 'decide': if (!rest.length) die('Usage: batcave decide <decision>'); await run('batcave_decide', { text: rest.join(' '), pattern: typeof flags.pattern === 'string' ? flags.pattern : undefined }); break;
+  case 'check': if (!rest.length) die('Usage: batcave check <plan or code>'); await run('batcave_decision_check', { text: rest.join(' ') }); break;
   case 'decisions': await run('batcave_decisions', {}); break;
   case 'ask': if (rest.length < 2) die('Usage: batcave ask <handle|team> <request>'); await run('batcave_request', { to: rest[0] === 'team' ? 'auto' : rest[0], text: rest.slice(1).join(' ') }); break;
   case 'requests': await run('batcave_requests', { box: flags.sent ? 'sent' : 'inbox' }); break;

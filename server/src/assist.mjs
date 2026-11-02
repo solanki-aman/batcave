@@ -17,6 +17,8 @@ export function overlap(a, b) {
   return n / Math.min(A.size, B.size);
 }
 
+export const DECISION_BAR = Number(process.env.BATCAVE_DECISION_BAR || 0.7);
+
 export class Assist {
   constructor({ alfred, stats, store, dataFile }) {
     this.alfred = alfred;
@@ -55,7 +57,7 @@ export class Assist {
 
   // How often each kind of suggestion was taken, by source.
   quality() {
-    const GOOD = new Set(['accepted', 'correct', 'proceeded-low', 'cancelled-real', 'returned']);
+    const GOOD = new Set(['accepted', 'correct', 'proceeded-low', 'cancelled-real', 'returned', 'fixed']);
     const out = {};
     for (const e of this.db.alfredLog) {
       const k = (out[`${e.kind}:${e.source}`] ||= { decisions: 0, withOutcome: 0, good: 0 });
@@ -133,6 +135,32 @@ export class Assist {
     }
     const id = this.log('guard', { file, change: (change || '').slice(0, 200), theirs: theirs.map((h) => h.slice(0, 120)) }, level, source, p);
     return { level, p, source, decisionId: id };
+  }
+
+  // ---- 3b. decision check: does this change break a pinned decision? ------
+  //
+  // A decision can carry a regex `pattern` (set when it is pinned); a match is a
+  // certain hit and works without Alfred. Alfred adds the judgment calls a
+  // pattern cannot express. The bar is high on purpose: a false stop costs the
+  // developer more than a miss, so only confident answers count.
+
+  async decisionConflicts(file, change, decisions) {
+    const text = String(change || '').trim();
+    const cands = decisions.slice(-12);
+    if (!text || !cands.length) return [];
+    const hits = new Map();
+    for (const d of cands) {
+      if (!d.pattern) continue;
+      try { if (new RegExp(d.pattern, 'i').test(text)) hits.set(d.id, { d, p: 1, source: 'pattern' }); } catch { /* bad pattern: ignore */ }
+    }
+    const rest = cands.filter((d) => !hits.has(d.id));
+    const ps = rest.length ? await this.yesno(`File: ${file}\nChange:\n${text.slice(0, 900)}`,
+      rest.map((d) => `Does this change go against the team decision "${d.text.slice(0, 240)}"?`), 'decision') : null;
+    if (ps) rest.forEach((d, i) => { if ((ps[i] ?? 0) >= DECISION_BAR) hits.set(d.id, { d, p: ps[i], source: 'alfred' }); });
+    return [...hits.values()].map(({ d, p, source }) => ({
+      id: d.id, text: d.text, author: d.author, room: d.room, p: Math.round(p * 100) / 100, source,
+      logId: this.log('decision', { file, change: text.slice(0, 200), decision: d.id }, 'breaks', source, p),
+    }));
   }
 
   // ---- 4. route a request to the right teammate --------------------------------

@@ -118,6 +118,11 @@ function idleTooLong(t) {
   return ACTIVE.has(t.status) && now() - (t.lastActivity || t.updatedAt) > STALE_HOURS * 60 * 60 * 1000;
 }
 // A claim goes stale when it sits idle, unless its owner said they paused it.
+function decisionsFor(me) {
+  const t = activeTaskOf(me);
+  return db.decisions.filter((d) => d.active && (d.room === 'team' || (t && d.room === t.room)));
+}
+
 function isStale(t) { return idleTooLong(t) && !t.paused; }
 
 function publicTask(t) { return { ...t, stale: isStale(t) }; }
@@ -439,6 +444,11 @@ route('GET', '/api/decisions', ({ query }) => db.decisions.filter((d) => d.activ
 
 route('POST', '/api/decisions', ({ me, body }) => {
   const d = { id: store.nextId('dec'), text: str(body.text, 'text', 500), room: cleanId(body.room) || 'team', author: me, at: now(), active: true };
+  if (typeof body.pattern === 'string' && body.pattern.trim()) {
+    const pattern = body.pattern.trim().slice(0, 200);
+    try { new RegExp(pattern, 'i'); } catch { throw new HttpError(400, 'pattern is not a valid regular expression'); }
+    d.pattern = pattern;
+  }
   const src = body.fromMessage != null && db.messages.find((m) => String(m.id) === String(body.fromMessage));
   if (src?.meta?.decisionId) { assist.outcome(src.meta.decisionId, 'accepted'); src.meta.pinned = true; }
   db.decisions.push(d);
@@ -599,13 +609,22 @@ route('GET', '/api/guard', async ({ me, query }) => {
     }, {});
   const list = Object.values(hits);
   stats.count('guard_checks');
-  if (!list.length) return { conflict: false, touches: [] };
+  const change = String(query.change || '');
+  // Decision check: does the change break a decision pinned for the team or this task?
+  const breaks = change ? await assist.decisionConflicts(files[0], change, decisionsFor(me)) : [];
+  if (breaks.length) stats.count('decision_breaks');
+  if (!list.length) return { conflict: false, touches: [], breaks };
   stats.count('guard_conflicts');
   // Alfred use 3: is this a real overlap, or a trivial one (imports, unrelated hunks)?
-  const sev = await assist.guardSeverity(list[0].file, String(query.change || ''), list);
+  const sev = await assist.guardSeverity(list[0].file, change, list);
   if (sev.level === 'low') stats.count('guard_low');
-  return { conflict: true, severity: sev.level, decisionId: sev.decisionId, source: sev.source, touches: list };
+  return { conflict: true, severity: sev.level, decisionId: sev.decisionId, source: sev.source, touches: list, breaks };
 });
+
+// Check a planned change or a plan against pinned decisions before doing it.
+route('POST', '/api/decisions/check', async ({ me, body }) => ({
+  breaks: await assist.decisionConflicts(String(body.file || ''), str(body.text, 'text', 4000), decisionsFor(me)),
+}));
 
 // context bundle injected into every prompt
 route('GET', '/api/context', ({ me, query }) => renderContext(me, { session: query.session, prompt: query.prompt, force: query.force === '1' }));

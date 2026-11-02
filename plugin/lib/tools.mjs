@@ -136,11 +136,21 @@ export const tools = {
 
   batcave_decide: {
     description: 'Pin a team decision. Pinned decisions are shared with every teammate\'s coding agent. Room defaults to team-wide.',
-    schema: { text: { type: 'string' }, room: { type: 'string' } },
+    schema: { text: { type: 'string' }, room: { type: 'string' }, pattern: { type: 'string', description: 'Optional regular expression for changes that break the decision, e.g. "#[0-9a-f]{6}" for "No new colors". Checked on every edit, with or without Alfred.' } },
     required: ['text'],
-    run: async ({ text, room }) => {
-      const d = await api(cfg(), 'POST', '/api/decisions', { text, room });
-      return `Pinned D-${d.id} for #${d.room}: ${d.text}`;
+    run: async ({ text, room, pattern }) => {
+      const d = await api(cfg(), 'POST', '/api/decisions', { text, room, pattern });
+      return `Pinned D-${d.id} for #${d.room}: ${d.text}${d.pattern ? ` (checked against /${d.pattern}/)` : ''}`;
+    },
+  },
+
+  batcave_decision_check: {
+    description: 'Check a plan or a planned change against the team\'s pinned decisions before doing it. Returns the decisions it would break.',
+    schema: { text: { type: 'string', description: 'The plan, or the code you are about to write' }, file: { type: 'string' } },
+    required: ['text'],
+    run: async ({ text, file }) => {
+      const r = await api(cfg(), 'POST', '/api/decisions/check', { text, file });
+      return r.breaks.length ? `This would break: ${r.breaks.map((b) => `D-${b.id} "${b.text}" (${b.author})`).join('; ')}. Adjust the plan or check with the user.` : 'No pinned decision is broken by this.';
     },
   },
 
