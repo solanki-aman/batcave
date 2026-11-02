@@ -181,12 +181,12 @@ Alfred never writes text. He decides when an LLM should join a room conversation
 | Trigger | Who answers | Runs when |
 |---|---|---|
 | `@alfred ...` from someone with an agent | the asker's own agent | at once in the Claude Code mod; at their next prompt in other agents |
-| `@alfred ...` from someone without one (dashboard) | the agent best placed to answer, picked by request routing | when that teammate presses **weigh in** (`w`) |
+| `@alfred ...` from someone without one (dashboard) | the best-placed agent among teammates with auto weigh-in on | at once; if nobody has it on, when the chosen teammate presses **weigh in** (`w`) |
 | No mention, room goes quiet | a participant's agent | only if Julia-1 judges the room stuck; at once if they turned on auto weigh-in, otherwise when they press **weigh in** |
 
-The agent receives a brief with the room's thread, its task and the pinned decisions, answers in at most 120 words with `batcave_say` (`reply_to` the request id), and does not change files unless asked. Quiet-room offers need Julia-1: it asks whether a question is open, whether the room is stuck, whether an outside answer would help and whether it is just chat, and offers only above `BATCAVE_SPEAK_BAR` (0.75). It waits `BATCAVE_ALFRED_PAUSE_MS` (45 s) after the last message and offers at most once per room every `BATCAVE_ALFRED_COOLDOWN_MIN` (30). Teammates mark answers helpful or not in the dashboard, which feeds the outcome log.
+The agent receives a brief with the room's thread, its task and the pinned decisions, answers in at most 120 words with `batcave_say` (`reply_to` the request id), and does not change files unless asked. Quiet-room offers need Julia-1: it asks whether a question is open, whether the room is stuck, whether an outside answer would help and whether it is just chat, and offers only above `BATCAVE_SPEAK_BAR` (0.75). It waits `BATCAVE_ALFRED_PAUSE_MS` (45 s) after the last message, so it does not cut into people mid-conversation, and brings an agent in every time it judges the room stuck. While one agent is answering in a room, Alfred does not start a second. Teammates mark answers helpful or not in the dashboard, which feeds the outcome log.
 
-**Auto weigh-in** is a per-person opt-in (`batcave auto-weigh-in on`, the Team tab in `/cave`, or the People view in the dashboard). With it on, Alfred's offers to you run on your agent without a key press, up to `BATCAVE_AUTO_WEIGHIN_PER_HOUR` (3) times an hour; past that they fall back to offers. In Claude Code the mod never cuts into a running turn: it waits for the current one to finish. Other agents pick it up at the next prompt.
+**Auto weigh-in** is a per-person opt-in (`batcave auto-weigh-in on`, the Team tab in `/cave`, or the People view in the dashboard). With it on, Alfred's offers to you run on your agent without a key press, every time. In Claude Code the mod never cuts into a running turn: it waits for the current one to finish. Other agents pick it up at the next prompt.
 
 ### Outcome log
 

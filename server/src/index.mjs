@@ -28,8 +28,6 @@ const stats = new Stats(store);
 const alfred = new Alfred(stats);
 const assist = new Assist({ alfred, stats, store, dataFile: DATA_FILE });
 const ALFRED_PAUSE_MS = Number(process.env.BATCAVE_ALFRED_PAUSE_MS || 45000);
-const ALFRED_COOLDOWN_MS = Number(process.env.BATCAVE_ALFRED_COOLDOWN_MIN || 30) * 60 * 1000;
-const AUTO_PER_HOUR = Number(process.env.BATCAVE_AUTO_WEIGHIN_PER_HOUR || 3);
 
 // ---------- helpers ----------
 
@@ -273,13 +271,15 @@ async function routeRequest(me, text) {
 //   it runs at once in the Claude Code mod, or at his next prompt elsewhere.
 // - With no mention, Alfred waits for the room to go quiet and asks Julia-1
 //   whether the team is stuck on something an outside answer would help with.
-//   If so, he picks the participant best placed to answer and *offers* their
-//   agent the question. It runs only if they press the key.
+//   If so, he picks the participant best placed to answer. Their agent joins
+//   at once if they turned on auto weigh-in, otherwise it is offered (one key).
+// - "@alfred" from someone without an agent (a PM on the dashboard) always gets
+//   an answer: it goes to the best-placed agent among those with auto weigh-in,
+//   and only falls back to an offer when nobody has it on.
 //
 // Without Julia-1 there are no offers; @alfred still works.
 
 const roomTimers = new Map();   // room -> pending quiet-room check
-const lastOffer = new Map();    // room -> time of the last unprompted offer
 
 function threadOf(room, n) {
   return db.messages.filter((m) => m.room === room && m.kind !== 'event').slice(-n).map((m) => ({
@@ -317,7 +317,9 @@ async function alfredAsked(room, me, text) {
 
 async function alfredOffer(room, gate, except = null) {
   const thread = threadOf(room, 10);
-  const hasAgent = (id) => db.people[id]?.tool && db.people[id].tool !== 'cli' && id !== except;
+  const forced = except !== null;   // someone wrote @alfred: prefer agents that can answer without a key press
+  const optedIn = Object.keys(db.people).filter((id) => db.people[id].autoWeighIn && db.people[id].tool && db.people[id].tool !== 'cli' && id !== except);
+  const hasAgent = (id) => db.people[id]?.tool && db.people[id].tool !== 'cli' && id !== except && (!forced || !optedIn.length || db.people[id].autoWeighIn);
   const live = (id) => ['online', 'agent running'].includes(presenceOf(db.people[id]));
   let ids = [...new Set(thread.map((m) => m.author))].filter(hasAgent);
   if (!ids.some(live)) ids = Object.keys(db.people).filter((id) => hasAgent(id) && live(id));
@@ -325,17 +327,14 @@ async function alfredOffer(room, gate, except = null) {
   if (!pool.length) return null;
   const hit = pool.length === 1 ? { person: pool[0] } : await assist.route(thread.map((m) => m.text).join('\n'), pool);
   const to = (hit?.person ?? pool[0]).id;
-  // Auto weigh-in: people who opted in get the question run on their agent without
-  // a key press, up to AUTO_PER_HOUR times an hour; past that it is a plain offer.
+  // Auto weigh-in: people who opted in get the question run on their agent without a key press.
   const p = db.people[to];
-  const recentAuto = db.requests.filter((x) => x.kind === 'alfred' && x.to === to && x.autoBy === 'setting' && now() - x.at < 60 * 60 * 1000).length;
-  const auto = Boolean(p.autoWeighIn) && recentAuto < AUTO_PER_HOUR;
+  const auto = Boolean(p.autoWeighIn);
   const why = except ? gate.reason : `the team looks stuck (${gate.reason})`;
   const r = createRequest('alfred', to, auto ? `Alfred brought your agent into #${room}: ${why}.` : except ? `${gate.reason} in #${room}. Answer with your agent?` : `#${room} looks stuck (${gate.reason}). Weigh in with your agent?`, room);
   r.kind = 'alfred'; r.auto = auto; if (auto) r.autoBy = 'setting';
   r.brief = briefFor(room, auto ? `${why}, and ${p.name || to} lets Alfred bring their agent in` : why, r.id); r.logId = gate.logId;
   if (auto) stats.count('alfred_auto_weighins');
-  if (!except) lastOffer.set(room, now());
   stats.count('alfred_offers');
   broadcast('request', r);
   return r;
@@ -353,7 +352,6 @@ async function gateRoom(room) {
 
 function scheduleGate(room) {
   if (!alfred.ready) return;   // no decision model, no unprompted offers
-  if (now() - (lastOffer.get(room) || 0) < ALFRED_COOLDOWN_MS) return;
   clearTimeout(roomTimers.get(room));
   const h = setTimeout(() => { roomTimers.delete(room); gateRoom(room).catch(() => {}); }, ALFRED_PAUSE_MS);
   h.unref();
