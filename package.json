@@ -1,6 +1,6 @@
 {
   "name": "batcave",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Multiplayer coding agents. A shared board, presence, rooms, decisions, requests, handoffs and an edit guard for teams using Claude Code, Codex, Gemini CLI, Antigravity, Cursor, Copilot CLI and OpenCode.",
   "type": "module",
   "bin": {

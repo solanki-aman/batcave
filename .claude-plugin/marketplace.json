@@ -11,7 +11,7 @@
       "name": "batcave",
       "source": "./plugin",
       "description": "Claude Code mod and plugin for Batcave: live team band, /cave pane, guard pane, plus shared hooks, MCP tools and commands.",
-      "version": "0.3.0"
+      "version": "0.4.0"
     }
   ]
 }

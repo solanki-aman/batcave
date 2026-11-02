@@ -66,26 +66,31 @@ All `/api/*` routes except `/api/health` need `Authorization: Bearer <team token
 | POST | `/api/presence` | `status`, `agent`, `now`, `role`, `branch` | Update your presence. |
 | GET | `/api/people` | | Teammates with presence and stats. |
 | GET | `/api/tasks` | `?status=&owner=` | List tasks. |
-| POST | `/api/tasks` | `title`, `description`, `source` | Create a backlog task. |
+| POST | `/api/tasks` | `title`, `description`, `source`, `allowDuplicate` | Create a backlog task. Returns `possibleDuplicate` when it repeats an open one. |
 | GET | `/api/tasks/:id` | | One task. |
 | POST | `/api/tasks/:id/claim` | `branch`, `force` | Claim. 409 if someone else holds a fresh claim. |
 | POST | `/api/tasks/:id/release` | | Back to backlog. |
 | POST | `/api/tasks/:id/status` | `status`, `pr`, `reviewer` | Move a card. |
 | GET | `/api/rooms` | | Rooms. |
 | GET | `/api/rooms/:id/messages` | `?limit=` | Recent messages. |
-| POST | `/api/rooms/:id/messages` | `text`, `kind` | Post. `@handle-claude` creates a request. |
+| POST | `/api/rooms/:id/messages` | `text`, `kind` | Post. `@handle-agent` creates a request; `@team-agent` routes it. |
 | GET | `/api/decisions` | `?room=` | Active decisions. |
-| POST | `/api/decisions` | `text`, `room` | Pin a decision. |
+| POST | `/api/decisions` | `text`, `room`, `fromMessage` | Pin a decision. |
 | POST | `/api/decisions/:id/retire` | | Retire a decision. |
 | GET | `/api/requests` | `?box=inbox\|sent&status=` | Your requests. |
-| POST | `/api/requests` | `to`, `text`, `room` | Ask a teammate's agent. |
+| POST | `/api/requests` | `to` (handle or `auto`), `text`, `room` | Ask a teammate's agent. |
 | POST | `/api/requests/:id/resolve` | `action: accept\|decline` | Recipient only. |
-| POST | `/api/handoffs` | `task`, `to`, `summary`, `todos` | Owner only. Transfers the card. |
+| POST | `/api/handoffs/check` | `summary`, `todos` | Which of done, left, test is missing. |
+| POST | `/api/handoffs` | `task`, `to`, `summary`, `todos` | Owner only. Transfers the card. Returns `missing`. |
 | GET | `/api/handoffs` | | Open handoffs to or from you. |
 | POST | `/api/handoffs/:id/pickup` | | Recipient only. Returns the packet. |
-| POST | `/api/events` | `type`, `files`, `command`, `summary`, `url` | Activity from hooks: `turn_start`, `turn_end`, `edit`, `command`, `commit`, `pr`. |
-| GET | `/api/guard` | `?files=a,b&minutes=` | Recent edits by others to these files. |
+| POST | `/api/events` | `type`, `files`, `hint`, `command`, `summary`, `branch`, `url` | Activity from hooks: `turn_start`, `turn_end`, `edit`, `command`, `commit`, `pr`. |
+| GET | `/api/guard` | `?files=a,b&minutes=&change=` | Recent edits by others to these files, with `severity` (`low` or `real`). |
 | GET | `/api/context` | | The context bundle injected into agents, with ready-to-use `text`. |
+| POST | `/api/notify-filter` | `items: [{kind, text, room}]` | Which events deserve a toast. |
+| POST | `/api/feedback` | `id`, `outcome` | Outcome of an Alfred suggestion. |
+| GET | `/api/alfred/log` | `?limit=` | Recent Alfred judgments and outcomes. |
+| POST | `/api/sweep` | | Run the paused-claim check now. |
 | GET | `/api/pulse` | `?since=<ms>` | Done, review, running, stale, new decisions. |
 
 
@@ -155,6 +160,20 @@ Batcave can use [Julia-1](https://huggingface.co/SupersonicLabs/Julia-1), an ope
 |---|---|---|
 | Context ranking | one yes/no question per candidate note | Only decisions and room messages relevant to the current prompt and task are injected. When a task has five or fewer decisions, all are kept. |
 | Decision spotting | choice among decision, question, blocker, update, chatter | Room messages that read like a decision get a "Pin as decision" suggestion in the dashboard. |
+| Card matching | choice among backlog cards, or none | With no claim, a prompt that matches a card adds "looks like T-9" to the context and a Claim button to the mod band. |
+| Duplicates | yes/no per open card | A new task that repeats an open one is flagged `possibleDuplicate` and badged on the board. |
+| Guard sorting | yes/no: could these changes conflict? | Trivial overlaps (imports, unrelated hunks) pass with a note instead of a stop. |
+| Request routing | choice among teammates, from claims, roles and recent files | `to: "auto"`, `batcave ask team ...` and `@team-agent` send the ask to the best-placed teammate. |
+| Commit linking | branch first, then a choice among your open cards | Commits land in the right card's room, even on `main`. |
+| Paused claims | yes/no: did the owner say they will come back? | A quiet claim whose owner said "back Monday" is marked paused instead of stale. Swept every 10 minutes. |
+| Handoff check | three yes/no: done, left, how to test | `batcave_handoff` sends the summary back when a part is missing. |
+| Toast filter | yes/no per event: worth interrupting now? | The mod only toasts what matters to you. Requests and handoffs always toast. |
+
+Every call has a rule-based fallback (keyword overlap and regexes), so all of the above works without Alfred, less sharply.
+
+### Outcome log
+
+Each judgment is logged with its input, answer, source (`alfred` or `rules`) and confidence, in the store and in `alfred-decisions.jsonl` next to the data file. Outcomes are attached when they happen: a suggested card claimed or not, a routed request accepted or declined, a suggested pin pinned, a guard Proceed or Cancel, a paused owner returning. `GET /api/stats` reports the acceptance rate per call under `alfred.quality`, and `GET /api/alfred/log` returns recent entries. This is the data you would fine-tune Julia-1 on later.
 
 ### Running it
 
@@ -187,6 +206,6 @@ The server looks for Alfred at `BATCAVE_ALFRED_URL` (default `http://127.0.0.1:4
 - `latency`: per key, `count`, `avg`, `p50`, `p95` over the last 400 samples. Keys are `api:<METHOD> <route>` (server time), `hook:<mode>` and `agent:<agent>` (end-to-end hook time reported by each client with its next request), and `alfred:<call>`.
 - `counters`: claims, guard checks and conflicts, requests, handoffs, decisions, messages by kind, alfred calls and failures.
 - `daily`: injected and saved tokens per day for the last 30 days.
-- `alfred`: whether Alfred is enabled and ready, and which model and device it uses.
+- `alfred`: whether Alfred is enabled and ready, which model and device it uses, and `quality`: decisions, outcomes and acceptance rate per call and source.
 
 The same numbers appear in the dashboard's Stats tab, in `batcave stats`, and as "tok saved" in the status line.

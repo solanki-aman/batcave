@@ -147,6 +147,19 @@ batcave server --alfred         # starts the server and Alfred together
 batcave stats                  # latency and savings
 ```
 
+Beyond ranking, Alfred makes the small calls a teammate would:
+
+- **"Looks like T-9."** Start work without a claim and it offers the matching card.
+- **Duplicates.** A new task that repeats an open one gets flagged.
+- **Guard sorting.** Trivial overlaps pass with a note; real ones stop.
+- **Routing.** `batcave ask team ...` or `@team-agent` goes to whoever knows that code.
+- **Commit linking.** Commits land on the right card, even from `main`.
+- **Paused, not stale.** "Back Monday" keeps a claim from going stale.
+- **Handoff check.** No handoff leaves without done, left and how to test.
+- **Toast filter.** Only what matters to you interrupts you.
+
+Every call falls back to plain rules without Alfred, and every judgment is logged with its outcome, so `batcave stats` shows how often Alfred is right.
+
 Alfred only advises. It never blocks an edit, grants access or accepts a request. Calls time out after 900 ms and fall back to rules. See [Alfred reference](docs/reference.md#alfred).
 
 ## Security and privacy

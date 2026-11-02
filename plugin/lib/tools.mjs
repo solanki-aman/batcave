@@ -49,12 +49,13 @@ export const tools = {
   },
 
   batcave_task_create: {
-    description: 'Add a task to the team backlog.',
+    description: 'Add a task to the team backlog. Batcave flags it if it looks like a duplicate of an open task.',
     schema: { title: { type: 'string' }, description: { type: 'string' }, source: { type: 'string', description: 'Where it came from, e.g. "plan step 2" or "issue #388"' } },
     required: ['title'],
     run: async (a) => {
       const t = await api(cfg(), 'POST', '/api/tasks', a);
-      return `Created ${t.id}: ${t.title} (room #${t.room})`;
+      const dup = t.possibleDuplicate ? `\nThis looks like a duplicate of ${t.possibleDuplicate.id}: "${t.possibleDuplicate.title}"${t.possibleDuplicate.owner ? ` (owned by ${t.possibleDuplicate.owner})` : ''}. Tell the user.` : '';
+      return `Created ${t.id}: ${t.title} (room #${t.room})${dup}`;
     },
   },
 
@@ -163,12 +164,12 @@ export const tools = {
   },
 
   batcave_request: {
-    description: 'Ask a teammate\'s coding agent to do something. It lands in their inbox; they decide whether to run it in their own session.',
-    schema: { to: { type: 'string', description: 'Teammate handle' }, text: { type: 'string' } },
-    required: ['to', 'text'],
+    description: 'Ask a teammate\'s coding agent to do something. It lands in their inbox; they decide whether to run it in their own session. Leave "to" empty (or "auto") to let Batcave pick the teammate best placed to take it.',
+    schema: { to: { type: 'string', description: 'Teammate handle, or "auto"' }, text: { type: 'string' } },
+    required: ['text'],
     run: async ({ to, text }) => {
-      const r = await api(cfg(), 'POST', '/api/requests', { to, text });
-      return `Sent R-${r.id} to ${to}. It runs only if they accept it.`;
+      const r = await api(cfg(), 'POST', '/api/requests', { to: to || 'auto', text });
+      return `Sent R-${r.id} to ${r.to}${r.routed ? ' (picked by Batcave)' : ''}. It runs only if they accept it.`;
     },
   },
 
@@ -192,10 +193,15 @@ export const tools = {
   },
 
   batcave_handoff: {
-    description: 'Hand a task you own to a teammate with a summary and open todos. Push the branch first so they can check it out.',
-    schema: { task: { type: 'string' }, to: { type: 'string' }, summary: { type: 'string' }, todos: { type: 'array', items: { type: 'string' } } },
+    description: 'Hand a task you own to a teammate with a summary and open todos. Push the branch first so they can check it out. The summary should say what is done, what is left and how to test; Batcave checks and sends it back if a part is missing (set force to send anyway).',
+    schema: { task: { type: 'string' }, to: { type: 'string' }, summary: { type: 'string' }, todos: { type: 'array', items: { type: 'string' } }, force: { type: 'boolean' } },
     required: ['task', 'to', 'summary'],
     run: async (a) => {
+      if (!a.force) {
+        const c = await api(cfg(), 'POST', '/api/handoffs/check', { summary: a.summary, todos: a.todos || [] });
+        const NAMES = { done: 'what is already done', left: 'what is left to do', test: 'how to test it' };
+        if (c.missing?.length) return `Not sent. The handoff summary is missing: ${c.missing.map((m) => NAMES[m] || m).join(', ')}. Add it and call batcave_handoff again, or pass force: true.`;
+      }
       const h = await api(cfg(), 'POST', '/api/handoffs', a);
       return `Handed ${h.task} to ${h.to} as H-${h.id}. They can pick it up with batcave_pickup ${h.id}.`;
     },

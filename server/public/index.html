@@ -125,12 +125,13 @@ const nameOf = (id) => S.state.people.find(p=>p.id===id)?.name || id;
 const LANES = [['backlog','Backlog'],['claimed','Claimed'],['running','Agent running'],['review','In review'],['done','Done']];
 
 function taskCard(t){
-  const owner = t.owner ? `<div class="row"><span class="av" style="${avColor(t.owner)}">${initials(nameOf(t.owner))}</span><span class="meta">${esc(nameOf(t.owner))}${t.stale?' · no activity '+ago(t.lastActivity):''}</span></div>` : '';
+  const owner = t.owner ? `<div class="row"><span class="av" style="${avColor(t.owner)}">${initials(nameOf(t.owner))}</span><span class="meta">${esc(nameOf(t.owner))}${t.stale?' · no activity '+ago(t.lastActivity):''}${t.paused?' · paused':''}</span></div>` : '';
   const action = t.status==='backlog' ? `<button class="btn clay small" data-claim="${esc(t.id)}">Claim</button>`
     : t.stale && t.owner!==ls.get('uid') ? `<button class="btn small" data-claim="${esc(t.id)}" data-force="1">Take over</button>` : '';
   return `<article class="card${t.stale?' stale':''}">
     <div class="meta">${esc(t.id)} · ${esc(t.source)}</div>
     <div class="title">${esc(t.title)}</div>
+    ${t.duplicateOf?`<div class="meta"><span class="badge">Possible duplicate of ${esc(t.duplicateOf.task)}</span></div>`:''}
     ${t.branch?`<div class="mono">${esc(t.branch)}</div>`:''}
     ${t.pr?`<div class="mono">${esc(t.pr)}</div>`:''}
     ${owner}${action}
@@ -169,7 +170,7 @@ function renderRooms(){
   const rooms = S.state.rooms;
   return `<div class="rooms"><nav class="roomlist" aria-label="Rooms">${rooms.map(r=>`<button data-room="${esc(r.id)}" aria-current="${r.id===S.room}">#${esc(r.name)}</button>`).join('')}</nav>
     <section class="msgs" aria-label="#${esc(S.room)}">
-      ${S.messages.map(m=>`<div class="msg ${esc(m.kind)}">${m.kind==='event'?`${esc(nameOf(m.author))} ${esc(m.text)} · ${ago(m.at)}`:`<span class="author">${esc(nameOf(m.author))}${m.kind==='agent'?"'s agent":''}</span> <span class="meta">${ago(m.at)}</span><div>${esc(m.text)}</div>${m.meta && m.meta.suggestPin ? `<button class="btn small suggest" data-pin="${m.id}">Pin as decision</button>` : ''}`}</div>`).join('') || '<p class="empty">No messages yet.</p>'}
+      ${S.messages.map(m=>`<div class="msg ${esc(m.kind)}">${m.kind==='event'?`${esc(nameOf(m.author))} ${esc(m.text)} · ${ago(m.at)}`:`<span class="author">${esc(nameOf(m.author))}${m.kind==='agent'?"'s agent":''}</span> <span class="meta">${ago(m.at)}</span><div>${esc(m.text)}</div>${m.meta && m.meta.suggestPin && !m.meta.pinned ? `<button class="btn small suggest" data-pin="${m.id}">Pin as decision</button>` : ''}`}</div>`).join('') || '<p class="empty">No messages yet.</p>'}
       <form id="say" class="row" style="margin-top:auto"><label class="sr" for="sayInput">Message #${esc(S.room)}</label><input id="sayInput" placeholder="Message #${esc(S.room)} · @name-agent asks their agent" style="flex:1"><button class="btn primary" type="submit">Send</button></form>
     </section></div>`;
 }
@@ -220,7 +221,7 @@ document.addEventListener('click', async (e) => {
   const r = e.target.closest('[data-room]');
   if (r) { S.room = r.dataset.room; return refresh(); }
   const pin = e.target.closest('[data-pin]');
-  if (pin) { const m = S.messages.find(x => String(x.id) === pin.dataset.pin); if (m) await api('POST','/api/decisions',{ text: m.text, room: m.room }); return refresh(); }
+  if (pin) { const m = S.messages.find(x => String(x.id) === pin.dataset.pin); if (m) await api('POST','/api/decisions',{ text: m.text, room: m.room, fromMessage: m.id }); return refresh(); }
   const d = e.target.closest('[data-retire]');
   if (d) { await api('POST', `/api/decisions/${d.dataset.retire}/retire`); return refresh(); }
 });

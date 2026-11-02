@@ -138,6 +138,11 @@ async function printStats() {
     out('\nLatency (ms)                         count     p50     p95');
     for (const [k, v] of rows) out(`  ${k.padEnd(34)} ${String(v.count).padStart(6)} ${String(v.p50 ?? '-').padStart(7)} ${String(v.p95 ?? '-').padStart(7)}`);
   }
+  const q = Object.entries(s.alfred.quality || {}).sort();
+  if (q.length) {
+    out('\nJudgments                    decisions  outcomes   taken');
+    for (const [k, v] of q) out(`  ${k.padEnd(28)} ${String(v.decisions).padStart(7)} ${String(v.withOutcome).padStart(9)} ${(v.rate == null ? '-' : v.rate + '%').padStart(7)}`);
+  }
   const c = s.counters;
   out(`\nActivity  claims ${c.claims || 0} · guard checks ${c.guard_checks || 0} (${c.guard_conflicts || 0} conflicts) · requests ${c.requests || 0} · handoffs ${c.handoffs || 0} · decisions ${c.decisions || 0}`);
 }
@@ -169,7 +174,7 @@ Team (works from any shell, no agent needed)
   batcave release <id>               batcave status <id> <backlog|claimed|running|review|done>
   batcave room [room]                batcave say <message>
   batcave decide <decision>          batcave decisions
-  batcave ask <handle> <request>     batcave requests [--sent]
+  batcave ask <handle|team> <request>    batcave requests [--sent]
   batcave accept <id>                batcave decline <id>
   batcave handoff <id> <handle> <summary>
   batcave pickup <id>                batcave pulse [hours]
@@ -269,7 +274,7 @@ switch (cmd) {
   case 'say': if (!rest.length) die('Usage: batcave say <message>'); await run('batcave_say', { text: rest.join(' ') }); break;
   case 'decide': if (!rest.length) die('Usage: batcave decide <decision>'); await run('batcave_decide', { text: rest.join(' ') }); break;
   case 'decisions': await run('batcave_decisions', {}); break;
-  case 'ask': if (rest.length < 2) die('Usage: batcave ask <handle> <request>'); await run('batcave_request', { to: rest[0], text: rest.slice(1).join(' ') }); break;
+  case 'ask': if (rest.length < 2) die('Usage: batcave ask <handle|team> <request>'); await run('batcave_request', { to: rest[0] === 'team' ? 'auto' : rest[0], text: rest.slice(1).join(' ') }); break;
   case 'requests': await run('batcave_requests', { box: flags.sent ? 'sent' : 'inbox' }); break;
   case 'accept': if (!rest[0]) die('Usage: batcave accept <id>'); await run('batcave_request_resolve', { id: rest[0], action: 'accept' }); break;
   case 'decline': if (!rest[0]) die('Usage: batcave decline <id>'); await run('batcave_request_resolve', { id: rest[0], action: 'decline' }); break;

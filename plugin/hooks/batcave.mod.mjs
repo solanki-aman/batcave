@@ -76,13 +76,21 @@ export function register(on) {
     }
     const file = relPath(state.root, e.file_path ?? e.notebook_path);
     let touches = [];
+    let verdict = null;
+    const hint = String(e.new_string ?? e.content ?? e.new_source ?? "").slice(0, 200);
     try {
-      const g = await api($, "GET", `/api/guard?files=${encodeURIComponent(file)}`);
+      const g = await api($, "GET", `/api/guard?files=${encodeURIComponent(file)}${hint ? `&change=${encodeURIComponent(hint)}` : ""}`);
       touches = g && g.conflict ? g.touches : [];
+      verdict = g;
     } catch {
       return next(e); // fail open: a missing server never blocks an edit
     }
     if (touches.length === 0) {
+      return next(e);
+    }
+    if (verdict.severity === "low") {
+      // Alfred judged the overlap trivial: mention it, do not stop the edit
+      $.ui.toast(`Batcave · ${touches[0].name} also touched ${file}; overlap looks trivial, going ahead`);
       return next(e);
     }
     while (state.held !== null) {
@@ -108,6 +116,9 @@ export function register(on) {
       try { if (opened.isPlaced) await $.ui.close({ id: GUARD_ID }); } catch { /* already closed */ }
       if (state.held === mine) state.held = null;
       $.ui.invalidate("ui.render");
+    }
+    if (verdict.decisionId && (mine.decision === "proceed" || mine.decision === "cancel")) {
+      try { await api($, "POST", "/api/feedback", { id: verdict.decisionId, outcome: mine.decision === "proceed" ? "proceeded-real" : "cancelled-real" }); } catch { /* best effort */ }
     }
     if (mine.decision === "proceed") {
       return next(e);
@@ -187,7 +198,7 @@ async function refresh($) {
     state.team = team;
     state.stats = stats;
     state.error = "";
-    announce($, team);
+    await announce($, team);
     await $.process.run(["sh", "-c", 'd="${BATCAVE_HOME:-$HOME/.batcave}"; mkdir -p "$d" && date +%s > "$d/mod-active"'], { timeoutMs: 3000 });
   } catch (err) {
     state.error = String(err?.message ?? err).slice(0, 80);
@@ -196,20 +207,28 @@ async function refresh($) {
 }
 
 // Toast what is new for this user since the last poll. The first poll only primes.
-function announce($, team) {
+async function announce($, team) {
   const me = state.cfg.user;
   const fresh = [];
   for (const r of team.requests.filter((x) => x.to === me)) {
-    if (!state.seen.requests.has(r.id)) { state.seen.requests.add(r.id); fresh.push(`${nameOf(r.from)} asked your agent: ${r.text}`); }
+    if (!state.seen.requests.has(r.id)) { state.seen.requests.add(r.id); fresh.push({ kind: "request", text: `${nameOf(r.from)} asked your agent: ${r.text}`, room: r.room }); }
   }
   for (const h of team.handoffs.filter((x) => x.to === me)) {
-    if (!state.seen.handoffs.has(h.id)) { state.seen.handoffs.add(h.id); fresh.push(`${nameOf(h.from)} handed you ${h.task}`); }
+    if (!state.seen.handoffs.has(h.id)) { state.seen.handoffs.add(h.id); fresh.push({ kind: "handoff", text: `${nameOf(h.from)} handed you ${h.task}`, room: "" }); }
   }
   for (const d of team.decisions) {
-    if (!state.seen.decisions.has(d.id)) { state.seen.decisions.add(d.id); if (d.author !== me) fresh.push(`New decision from ${nameOf(d.author)}: ${d.text}`); }
+    if (!state.seen.decisions.has(d.id)) { state.seen.decisions.add(d.id); if (d.author !== me) fresh.push({ kind: "decision", text: `New decision from ${nameOf(d.author)}: ${d.text}`, room: d.room }); }
   }
-  if (state.primed) for (const msg of fresh.slice(0, 3)) $.ui.toast(`Batcave · ${msg.slice(0, 140)}`);
+  const primed = state.primed;
   state.primed = true;
+  if (!primed || fresh.length === 0) return;
+  // Alfred use 8: only interrupt for what matters to me right now
+  let keep = fresh.map(() => true);
+  try {
+    const r = await api($, "POST", "/api/notify-filter", { items: fresh });
+    if (Array.isArray(r?.keep) && r.keep.length === fresh.length) keep = r.keep;
+  } catch { /* keep everything */ }
+  for (const item of fresh.filter((_, i) => keep[i]).slice(0, 3)) $.ui.toast(`Batcave · ${item.text.slice(0, 140)}`);
 }
 
 async function openPane($, tab) {
@@ -267,10 +286,13 @@ function band($, t, columns) {
     Text({ key: "on", dimColor: true, children: ` · ${online} online` }),
   ];
   if (reqs) parts.push(Text({ key: "req", color: "yellow", bold: true, children: ` · ${reqs} request${reqs > 1 ? "s" : ""}` }));
-  parts.push(Text({ key: "mine", children: mine ? ` · ${mine.id} ${mine.status}` : " · no claim" }));
+  const suggestion = mine ? null : team.people.find((p) => p.id === me)?.suggestion;
+  if (suggestion) parts.push(Text({ key: "mine", color: "cyan", children: ` · looks like ${suggestion.task}: ${suggestion.title}`, wrap: "truncate-end" }));
+  else parts.push(Text({ key: "mine", children: mine ? ` · ${mine.id} ${mine.status}` : " · no claim" }));
   if (columns >= 100) for (const p of busy) parts.push(Text({ key: `b-${p.id}`, color: "cyan", children: ` · ${p.name}: ${p.now || "working"}`, wrap: "truncate-end" }));
   if (columns >= 120 && saved) parts.push(Text({ key: "saved", dimColor: true, children: ` · ${short(saved)} tok saved` }));
   const buttons = columns >= 90 ? [
+    ...(suggestion ? [Button({ key: "suggest", label: `Claim ${suggestion.task}`, hotkey: "c", onPress: () => claim($, suggestion.task) })] : []),
     Button({ key: "board", label: "Board", hotkey: "b", onPress: () => openPane($, 0) }),
     Button({ key: "team", label: "Team", hotkey: "t", onPress: () => openPane($, 1) }),
     ...(reqs ? [Button({ key: "requests", label: "Requests", hotkey: "q", onPress: () => openPane($, 2) })] : []),

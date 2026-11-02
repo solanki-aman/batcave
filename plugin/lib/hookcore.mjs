@@ -87,9 +87,12 @@ export async function handle(ev, { canAsk = true } = {}) {
       if (ev.tool !== 'edit' || !ev.files.length) return {};
       if (ev.agent === 'claude' && modActive()) return {}; // the Batcave mod holds the edit in a pane instead
       const files = ev.files.map((f) => relPath(f, cfg.root));
-      const g = await api(cfg, 'GET', `/api/guard?files=${encodeURIComponent(files.join(','))}&minutes=${cfg.guardMinutes}`);
+      const change = ev.hint ? `&change=${encodeURIComponent(ev.hint)}` : '';
+      const g = await api(cfg, 'GET', `/api/guard?files=${encodeURIComponent(files.join(','))}&minutes=${cfg.guardMinutes}${change}`);
       if (!g.conflict) return {};
       const who = g.touches.map((t) => `${t.name}'s agent edited ${t.file} ${ago(t.at)}${t.task ? ` (${t.task})` : ''}`).join('; ');
+      // Alfred judged the overlap trivial: let the edit through and just mention it
+      if (g.severity === 'low') return { context: `Batcave: ${who}. The overlap looks trivial, so the edit went ahead. Mention it to the user if it matters.` };
       if (canAsk) {
         return { guard: { mode: 'ask', reason: `Batcave guard: ${who}. Coordinate before editing, or approve to continue.` } };
       }
@@ -101,7 +104,7 @@ export async function handle(ev, { canAsk = true } = {}) {
     case 'post-tool': {
       if (!cfg.shareActivity) return {};
       if (ev.tool === 'edit' && ev.files.length) {
-        await api(cfg, 'POST', '/api/events', { type: 'edit', files: ev.files.map((f) => relPath(f, cfg.root)) });
+        await api(cfg, 'POST', '/api/events', { type: 'edit', files: ev.files.map((f) => relPath(f, cfg.root)), hint: ev.hint || '' });
         return {};
       }
       if (ev.tool === 'shell' && ev.command) {
@@ -109,7 +112,9 @@ export async function handle(ev, { canAsk = true } = {}) {
         if (/\bgit\s+commit\b/.test(cmd)) {
           let summary = '';
           try { summary = execFileSync('git', ['log', '-1', '--format=%h %s'], { cwd: ev.cwd || process.cwd(), stdio: ['ignore', 'pipe', 'ignore'], timeout: 1500 }).toString().trim(); } catch {}
-          if (summary) await api(cfg, 'POST', '/api/events', { type: 'commit', summary });
+          let branch = '';
+          try { branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: ev.cwd || process.cwd(), stdio: ['ignore', 'pipe', 'ignore'], timeout: 1500 }).toString().trim(); } catch {}
+          if (summary) await api(cfg, 'POST', '/api/events', { type: 'commit', summary, branch });
           return {};
         }
         if (/\bgh\s+pr\s+create\b/.test(cmd)) {

@@ -36,6 +36,17 @@ function filesFrom(input, args) {
   return [...new Set(files)];
 }
 
+// A short sample of what the edit writes, so Alfred can tell trivial overlaps from real ones.
+function hintFrom(args) {
+  if (!args || typeof args !== 'object') return '';
+  const v = args.new_string ?? args.newString ?? args.content ?? args.new_str ?? args.patch ?? args.input
+    ?? (Array.isArray(args.edits) ? args.edits.map((e) => e.new_string ?? e.newString ?? '').join('\n') : '');
+  if (typeof v !== 'string') return '';
+  // patches: keep only the added lines
+  const added = /^\*\*\* (Begin Patch|Update File|Add File)/m.test(v) ? v.split('\n').filter((l) => l.startsWith('+') && !l.startsWith('+++')).map((l) => l.slice(1)).join('\n') : v;
+  return added.slice(0, 200);
+}
+
 function commandFrom(input, args) {
   const c = (args && typeof args === 'object' ? args.command ?? args.cmd : undefined) ?? input.command;
   if (Array.isArray(c)) return c.join(' ');
@@ -56,7 +67,7 @@ export function normalize(agent, mode, input = {}) {
     agent,
     cwd: input.cwd || (Array.isArray(input.workspace_roots) && input.workspace_roots[0]) || process.env.GEMINI_PROJECT_DIR || process.env.CLAUDE_PROJECT_DIR || process.cwd(),
     sessionId: input.session_id ?? input.sessionId ?? input.conversation_id ?? input.sessionID ?? `${agent}-default`,
-    toolName, tool, files, command,
+    toolName, tool, files, command, hint: hintFrom(args),
     prompt: typeof (input.prompt ?? input.user_prompt ?? input.message) === 'string' ? (input.prompt ?? input.user_prompt ?? input.message) : '',
     output: typeof output === 'string' ? output : JSON.stringify(output),
   };

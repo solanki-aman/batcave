@@ -8,9 +8,10 @@ import crypto from 'node:crypto';
 import { Store } from './store.mjs';
 import { Stats, estTokens } from './stats.mjs';
 import { Alfred, yesProb, topChoice } from './alfred.mjs';
+import { Assist } from './assist.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const VERSION = '0.3.0';
+const VERSION = '0.4.0';
 
 const PORT = Number(process.env.PORT || 4777);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -25,6 +26,7 @@ const store = new Store(DATA_FILE);
 const db = store.data;
 const stats = new Stats(store);
 const alfred = new Alfred(stats);
+const assist = new Assist({ alfred, stats, store, dataFile: DATA_FILE });
 
 // ---------- helpers ----------
 
@@ -112,9 +114,11 @@ function publicPerson(p) {
   return { ...p, presence: presenceOf(p), stats: statsOf(p.id) };
 }
 
-function isStale(t) {
+function idleTooLong(t) {
   return ACTIVE.has(t.status) && now() - (t.lastActivity || t.updatedAt) > STALE_HOURS * 60 * 60 * 1000;
 }
+// A claim goes stale when it sits idle, unless its owner said they paused it.
+function isStale(t) { return idleTooLong(t) && !t.paused; }
 
 function publicTask(t) { return { ...t, stale: isStale(t) }; }
 
@@ -208,7 +212,9 @@ async function renderContext(me, { session = '', prompt = '', force = false } = 
     }
   }
 
-  const { text, reqs, hand } = contextLines(me, p, t, decisions, msgs);
+  let { text, reqs, hand } = contextLines(me, p, t, decisions, msgs);
+  const suggestion = !t && prompt ? await suggestTask(me, prompt) : null;
+  if (suggestion) text += `\nThe user's request looks like backlog task ${suggestion.task.id}: "${suggestion.task.title}". Before starting, ask the user whether to claim it (batcave_claim ${suggestion.task.id}).`;
   if (ranked) stats.tokens('savedRanking', Math.max(0, estTokens(baseline.text) - estTokens(text)));
 
   let changed = true;
@@ -221,7 +227,31 @@ async function renderContext(me, { session = '', prompt = '', force = false } = 
   }
   if (changed) stats.tokens('injected', estTokens(text)); else stats.tokens('savedDedupe', estTokens(text));
   stats.count('context_served');
-  return { task: t ? publicTask(t) : null, decisions, requests: reqs, handoffs: hand, text, changed, ranked, tokens: estTokens(text), baselineTokens: estTokens(baseline.text) };
+  return { task: t ? publicTask(t) : null, suggestion: suggestion ? { task: suggestion.task.id, title: suggestion.task.title } : null, decisions, requests: reqs, handoffs: hand, text, changed, ranked, tokens: estTokens(text), baselineTokens: estTokens(baseline.text) };
+}
+
+// Alfred use 1: the user started work with no claim; does it match a backlog card?
+async function suggestTask(me, prompt) {
+  const p = person(me);
+  const backlog = Object.values(db.tasks).filter((x) => x.status === 'backlog' || (x.status === 'claimed' && !x.owner));
+  const hit = await assist.matchTask(String(prompt), backlog);
+  if (p.suggestion && p.suggestion.task !== hit?.task.id) assist.outcome(p.suggestion.decisionId, 'ignored');
+  p.suggestion = hit ? { task: hit.task.id, title: hit.task.title, decisionId: hit.decisionId, at: now() } : null;
+  broadcast('person', publicPerson(p));
+  return hit;
+}
+
+// Short profile of a teammate, used to route requests.
+function profileOf(x) {
+  const t = activeTaskOf(x.id);
+  const files = [...new Set(db.touches.filter((y) => y.person === x.id).slice(-30).map((y) => path.basename(y.file)))].slice(-8);
+  const done = Object.values(db.tasks).filter((y) => y.owner === x.id && y.status !== 'backlog').slice(-4).map((y) => y.title);
+  return [x.name || x.id, x.role && `role ${x.role}`, t && `working on ${t.title}`, done.length && `owns ${done.join('; ')}`, files.length && `recently edited ${files.join(', ')}`].filter(Boolean).join('. ');
+}
+
+async function routeRequest(me, text) {
+  const people = Object.values(db.people).filter((x) => x.id !== me).map((x) => ({ id: x.id, profile: profileOf(x) }));
+  return assist.route(text, people);
 }
 
 // Classify a human room message; suggest pinning it when it reads like a team decision.
@@ -244,9 +274,26 @@ async function classifyMessage(msg) {
   if (!top) return;
   msg.meta = { ...(msg.meta || {}), kind: top.choice, confidence: top.p };
   stats.count(`messages_${top.choice}`);
-  if (top.choice === 'decision' && (Number.isNaN(top.p) || top.p >= 0.6)) msg.meta.suggestPin = true;
+  if (top.choice === 'decision' && (Number.isNaN(top.p) || top.p >= 0.6)) {
+    msg.meta.suggestPin = true;
+    msg.meta.decisionId = assist.log('pin', { text: msg.text.slice(0, 200) }, 'decision', 'alfred', top.p);
+  }
   broadcast('message', msg);
 }
+
+// Alfred use 6: before a quiet claim turns stale, check whether its owner said they paused it.
+async function sweepPaused() {
+  for (const t of Object.values(db.tasks)) {
+    if (!t.owner || t.paused || !idleTooLong(t) || t.pausedCheckedAt > (t.lastActivity || 0)) continue;
+    t.pausedCheckedAt = now();
+    const since = (t.lastActivity || t.updatedAt) - 3 * DAY;
+    const said = db.messages.filter((m) => m.author === t.owner && m.kind === 'human' && m.at > since && (m.room === t.room || m.room === 'team'));
+    const r = await assist.pausedOrAbandoned(t, said);
+    if (r.paused) { t.paused = { at: now(), decisionId: r.decisionId }; broadcast('task', publicTask(t)); }
+  }
+}
+setInterval(() => sweepPaused().catch(() => {}), 10 * 60 * 1000).unref();
+setTimeout(() => sweepPaused().catch(() => {}), 5000).unref();
 
 // ---------- routes ----------
 
@@ -298,8 +345,10 @@ route('GET', '/api/tasks', ({ query }) => {
   return list.map(publicTask);
 });
 
-route('POST', '/api/tasks', ({ me, body }) => {
+route('POST', '/api/tasks', async ({ me, body }) => {
   const title = str(body.title, 'title', 200);
+  const open = Object.values(db.tasks).filter((x) => x.status !== 'done');
+  const dup = body.allowDuplicate ? null : await assist.duplicateOf(title, body.description, open);
   const n = store.nextId('task');
   const id = `T-${n}`;
   const room = `t${n}-${slugify(title, 24)}`;
@@ -309,11 +358,12 @@ route('POST', '/api/tasks', ({ me, body }) => {
     owner: null, reviewer: null, branch: null, pr: null, room, files: [],
     createdBy: me, createdAt: now(), updatedAt: now(), lastActivity: now(),
   };
+  if (dup) t.duplicateOf = { task: dup.task.id, decisionId: dup.decisionId };
   db.tasks[id] = t;
   ensureRoom(room, room, id);
   broadcast('task', publicTask(t));
-  post(room, me, `created ${id}: ${title}`, 'event', { task: id });
-  return publicTask(t);
+  post(room, me, `created ${id}: ${title}${dup ? ` (looks like a duplicate of ${dup.task.id})` : ''}`, 'event', { task: id });
+  return { ...publicTask(t), possibleDuplicate: dup ? { ...publicTask(dup.task), decisionId: dup.decisionId } : null };
 });
 
 route('GET', '/api/tasks/:id', ({ params }) => publicTask(getTask(params.id)));
@@ -326,6 +376,9 @@ route('POST', '/api/tasks/:id/claim', async ({ me, params, body }) => {
   const others = Object.values(db.tasks).filter((x) => x.owner === me && ACTIVE.has(x.status) && x.id !== t.id);
   const branch = typeof body.branch === 'string' && body.branch.trim() ? body.branch.trim() : `${me}/${t.id.toLowerCase()}-${slugify(t.title, 24)}`;
   const prev = t.owner;
+  const me0 = person(me);
+  if (me0.suggestion) { assist.outcome(me0.suggestion.decisionId, me0.suggestion.task === t.id ? 'accepted' : 'rejected'); me0.suggestion = null; }
+  if (t.paused) { assist.outcome(t.paused.decisionId, prev === me ? 'returned' : 'taken-over'); t.paused = null; }
   setTask(t, { owner: me, status: t.status === 'backlog' || t.status === 'claimed' ? 'claimed' : t.status, branch, lastActivity: now() }, me, true);
   post(t.room, me, prev && prev !== me ? `took over ${t.id} from ${person(prev)?.name || prev}` : `claimed ${t.id}`, 'event', { task: t.id });
   const p = person(me); p.task = t.id; p.branch = branch;
@@ -359,7 +412,7 @@ route('GET', '/api/rooms/:id/messages', ({ params, query }) => {
   return db.messages.filter((m) => m.room === params.id).slice(-limit);
 });
 
-route('POST', '/api/rooms/:id/messages', ({ me, params, body }) => {
+route('POST', '/api/rooms/:id/messages', async ({ me, params, body }) => {
   const text = str(body.text, 'text');
   const kind = body.kind === 'agent' ? 'agent' : 'human';
   const msg = post(params.id, me, text, kind);
@@ -367,6 +420,14 @@ route('POST', '/api/rooms/:id/messages', ({ me, params, body }) => {
   for (const m of text.matchAll(/@([a-z0-9._-]+?)-(?:agent|claude|codex|cursor|gemini|copilot|opencode)\b/gi)) {
     const to = cleanId(m[1]);
     if (db.people[to] && to !== me) createRequest(me, to, text, params.id);
+  }
+  // @team-agent: let Alfred (or the rules) pick the teammate best placed to take it
+  if (/@team-agent\b/i.test(text)) {
+    const hit = await routeRequest(me, text);
+    if (hit) {
+      const r = createRequest(me, hit.person.id, text, params.id, hit.decisionId);
+      post(r.room, 'batcave', `routed to ${person(hit.person.id)?.name || hit.person.id}'s agent`, 'event', { request: r.id });
+    }
   }
   stats.count('messages');
   classifyMessage(msg).catch(() => {});
@@ -378,6 +439,8 @@ route('GET', '/api/decisions', ({ query }) => db.decisions.filter((d) => d.activ
 
 route('POST', '/api/decisions', ({ me, body }) => {
   const d = { id: store.nextId('dec'), text: str(body.text, 'text', 500), room: cleanId(body.room) || 'team', author: me, at: now(), active: true };
+  const src = body.fromMessage != null && db.messages.find((m) => String(m.id) === String(body.fromMessage));
+  if (src?.meta?.decisionId) { assist.outcome(src.meta.decisionId, 'accepted'); src.meta.pinned = true; }
   db.decisions.push(d);
   stats.count('decisions');
   broadcast('decision', d);
@@ -395,8 +458,9 @@ route('POST', '/api/decisions/:id/retire', ({ me, params }) => {
 });
 
 // requests (asks for someone else's agent; they choose to run them)
-function createRequest(from, to, text, room) {
+function createRequest(from, to, text, room, routedBy = null) {
   const r = { id: store.nextId('req'), from, to, text, room: room || activeTaskOf(to)?.room || 'team', status: 'pending', at: now() };
+  if (routedBy) r.routed = { decisionId: routedBy };
   db.requests.push(r);
   stats.count('requests');
   broadcast('request', r);
@@ -408,11 +472,17 @@ route('GET', '/api/requests', ({ me, query }) => {
   return db.requests.filter((r) => r[box] === me && (!query.status || r.status === query.status));
 });
 
-route('POST', '/api/requests', ({ me, body }) => {
-  const to = cleanId(body.to);
+route('POST', '/api/requests', async ({ me, body }) => {
+  const text = str(body.text, 'text');
+  let to = cleanId(body.to), routed = null;
+  if (!to || to === 'auto' || to === 'team') {
+    routed = await routeRequest(me, text);
+    need(routed, 404, 'could not work out who should take this; name a teammate');
+    to = routed.person.id;
+  }
   need(db.people[to], 404, `no teammate called ${body.to}`);
   need(to !== me, 400, 'that is you');
-  const r = createRequest(me, to, str(body.text, 'text'), cleanId(body.room));
+  const r = createRequest(me, to, text, cleanId(body.room), routed?.decisionId);
   post(r.room, me, `asked ${person(to).name}'s agent: ${r.text}`, 'event', { request: r.id });
   return r;
 });
@@ -424,13 +494,16 @@ route('POST', '/api/requests/:id/resolve', ({ me, params, body }) => {
   need(['accept', 'decline'].includes(body.action), 400, 'action must be accept or decline');
   r.status = body.action === 'accept' ? 'accepted' : 'declined';
   r.resolvedAt = now();
+  if (r.routed) assist.outcome(r.routed.decisionId, r.status);
   broadcast('request', r);
   post(r.room, me, `${r.status} request from ${person(r.from)?.name || r.from}`, 'event', { request: r.id });
   return r;
 });
 
 // handoffs
-route('POST', '/api/handoffs', ({ me, body }) => {
+route('POST', '/api/handoffs/check', async ({ body }) => assist.handoffGaps(str(body.summary, 'summary', 6000), Array.isArray(body.todos) ? body.todos.map(String) : []));
+
+route('POST', '/api/handoffs', async ({ me, body }) => {
   const t = getTask(body.task);
   const to = cleanId(body.to);
   need(db.people[to], 404, `no teammate called ${body.to}`);
@@ -441,6 +514,8 @@ route('POST', '/api/handoffs', ({ me, body }) => {
     todos: Array.isArray(body.todos) ? body.todos.map(String).slice(0, 30) : [],
     branch: t.branch,
   };
+  const gaps = await assist.handoffGaps(h.summary, h.todos);
+  h.missing = gaps.missing;
   db.handoffs.push(h);
   stats.count('handoffs');
   setTask(t, { owner: to, status: 'claimed', lastActivity: now() }, me, true);
@@ -466,11 +541,12 @@ route('POST', '/api/handoffs/:id/pickup', ({ me, params }) => {
 });
 
 // events from hooks: edits, commands, commits, PRs, turn boundaries
-route('POST', '/api/events', ({ me, body }) => {
+route('POST', '/api/events', async ({ me, body }) => {
   const p = person(me);
   const t = activeTaskOf(me);
   const type = String(body.type || '');
   if (t) t.lastActivity = now();
+  if (t?.paused && type !== 'turn_end') { assist.outcome(t.paused.decisionId, 'returned'); t.paused = null; }
 
   if (type === 'turn_start') {
     p.agent = 'running'; p.since = now();
@@ -481,7 +557,8 @@ route('POST', '/api/events', ({ me, body }) => {
     p.now = t ? `idle on ${t.id}` : 'idle';
   } else if (type === 'edit') {
     const files = Array.isArray(body.files) ? body.files.map(String).slice(0, 50) : [];
-    for (const f of files) db.touches.push({ person: me, task: t?.id || null, file: f, at: now() });
+    const hint = typeof body.hint === 'string' ? body.hint.slice(0, 300) : '';
+    for (const f of files) db.touches.push({ person: me, task: t?.id || null, file: f, at: now(), ...(hint ? { hint } : {}) });
     store.pruneTouches();
     if (t) t.files = [...new Set([...(t.files || []), ...files])].slice(-200);
     p.agent = 'running';
@@ -490,7 +567,17 @@ route('POST', '/api/events', ({ me, body }) => {
   } else if (type === 'command') {
     p.now = `running ${String(body.command || '').slice(0, 60)}`;
   } else if (type === 'commit') {
-    if (t) post(t.room, me, `committed ${String(body.summary || '').slice(0, 300)}`, 'agent', { task: t.id });
+    // Alfred use 5: link the commit to the right card (branch first, then the subject)
+    const summary = String(body.summary || '').slice(0, 300);
+    const mine = Object.values(db.tasks).filter((x) => x.owner === me && (ACTIVE.has(x.status) || x.status === 'review'));
+    const link = await assist.linkCommit(summary, typeof body.branch === 'string' ? body.branch : '', mine);
+    const target = link?.task || t;
+    if (target) {
+      target.lastActivity = now();
+      target.commits = [...(target.commits || []), { summary, at: now() }].slice(-20);
+      post(target.room, me, `committed ${summary}`, 'agent', { task: target.id, linkedBy: link?.source || 'active' });
+      broadcast('task', publicTask(target));
+    }
   } else if (type === 'pr') {
     if (t) setTask(t, { status: 'review', pr: String(body.url || body.summary || '').slice(0, 300) }, me);
   }
@@ -500,7 +587,7 @@ route('POST', '/api/events', ({ me, body }) => {
 });
 
 // guard: has someone else touched this file recently?
-route('GET', '/api/guard', ({ me, query }) => {
+route('GET', '/api/guard', async ({ me, query }) => {
   const files = String(query.files || '').split(',').map((s) => s.trim()).filter(Boolean);
   const windowMs = (Number(query.minutes) || GUARD_MINUTES) * 60 * 1000;
   const hits = db.touches
@@ -512,17 +599,34 @@ route('GET', '/api/guard', ({ me, query }) => {
     }, {});
   const list = Object.values(hits);
   stats.count('guard_checks');
-  if (list.length) stats.count('guard_conflicts');
-  return { conflict: list.length > 0, touches: list };
+  if (!list.length) return { conflict: false, touches: [] };
+  stats.count('guard_conflicts');
+  // Alfred use 3: is this a real overlap, or a trivial one (imports, unrelated hunks)?
+  const sev = await assist.guardSeverity(list[0].file, String(query.change || ''), list);
+  if (sev.level === 'low') stats.count('guard_low');
+  return { conflict: true, severity: sev.level, decisionId: sev.decisionId, source: sev.source, touches: list };
 });
 
 // context bundle injected into every prompt
 route('GET', '/api/context', ({ me, query }) => renderContext(me, { session: query.session, prompt: query.prompt, force: query.force === '1' }));
 
+// Alfred use 8: which of these events deserve a toast for me right now?
+route('POST', '/api/notify-filter', async ({ me, body }) => {
+  const items = Array.isArray(body.items) ? body.items.slice(0, 20).map((x) => ({ kind: String(x.kind || ''), text: String(x.text || '').slice(0, 300), room: String(x.room || '') })) : [];
+  return { keep: await assist.worthToast(person(me)?.name || me, activeTaskOf(me), items) };
+});
+
+// Outcome of an Alfred suggestion, reported by clients (guard proceed/cancel, dismissals...).
+route('POST', '/api/feedback', ({ body }) => ({ ok: assist.outcome(body.id, String(body.outcome || '')) }));
+
+route('POST', '/api/sweep', async () => { await sweepPaused(); return { ok: true }; });
+
+route('GET', '/api/alfred/log', ({ query }) => db.alfredLog.slice(-Math.min(Number(query.limit) || 50, 500)));
+
 // stats: latency and savings for the team
 route('GET', '/api/stats', () => ({
   ...stats.summary(),
-  alfred: { enabled: !alfred.disabled, ready: alfred.ready, url: alfred.url, ...alfred.health },
+  alfred: { enabled: !alfred.disabled, ready: alfred.ready, url: alfred.url, ...alfred.health, quality: assist.quality() },
   team: { people: Object.keys(db.people).length, tasks: Object.keys(db.tasks).length, decisions: db.decisions.filter((d) => d.active).length },
 }));
 
