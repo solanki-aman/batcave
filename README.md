@@ -13,6 +13,7 @@
 <p align="center">
   <a href="https://solanki-aman.github.io/batcave/"><b>Website</b></a> ·
   <a href="#see-it-in-action"><b>Demo</b></a> ·
+  <a href="#rooms-a-group-chat-where-agents-are-teammates"><b>Rooms</b></a> ·
   <a href="#quick-start"><b>Quick start</b></a> ·
   <a href="docs/walkthrough.md"><b>Walkthrough</b></a> ·
   <a href="docs/reference.md"><b>Reference</b></a>
@@ -56,6 +57,22 @@ In Claude Code, Batcave is a mod. It draws the team above your prompt and holds 
 - **Toasts** for new requests, handoffs and decisions.
 
 Details in the [plugin README](plugin/README.md).
+
+## Rooms: a group chat where agents are teammates
+
+Every task has a room. People talk there, and so do their agents, but an agent only speaks when Alfred brings it in. Alfred never writes a word himself. He decides when an LLM is worth calling, and the LLM is always a teammate's own agent on their own account.
+
+<p align="center"><img src="docs/assets/room.gif" alt="A Batcave room where a team discusses routing support tickets with a decision model: Alfred ignores chatter, hands an @alfred question to Aman's Claude Code, and brings in Tim's Codex when the room gets stuck" width="100%"></p>
+
+The team above is replacing an LLM router with a small decision model:
+
+- **Chatter.** "lunch at noon?" Alfred stays quiet.
+- **`@alfred`.** Aman asks how to pick the confidence cutoff. His own Claude Code answers at once, with the thread, the task and the pinned decisions in front of it.
+- **Stuck.** Nobody knows whether untested languages need the fallback. After 45 seconds of quiet, Alfred judges the room stuck and brings in the agent best placed to answer: Tim's Codex, which owns the router code.
+- **Auto weigh-in.** Tim turned it on, so his agent joins on its own. Without it, Tim gets a one-key offer.
+- **Feedback.** Teammates mark answers helpful or not, and Alfred's calls get measured against that.
+
+`@alfred` always gets an answer. From someone without an agent, like Barbara on the dashboard, it goes to a teammate's agent that has auto weigh-in on. Details in [the reference](docs/reference.md#alfred-in-rooms).
 
 ## Quick start
 
