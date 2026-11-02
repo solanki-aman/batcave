@@ -10,12 +10,12 @@
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  /* The Grid: black void, cyan light lines, an orange rival trail. Everything reads like a terminal.
+  /* The Grid, quietly: near-black, hairline cyan, one warm accent. No glow. Everything reads like a terminal.
      Layout idea: a long scroll where pinned scenes play a team's day as you move through it. */
-  --ink:#02060A; --stone:#06111A; --stone-2:#0A1A26; --line:rgba(0,229,255,.22);
-  --fog:#D8F6FF; --muted:#7FB3C2; --dim:#3F6B78;
-  --lamp:#00E5FF; --agent:#FF9E3D; --ok:#39FF88; --warn:#FF6B3D;
-  --glow:0 0 18px rgba(0,229,255,.45);
+  --ink:#07090C; --stone:#0C1116; --stone-2:#111920; --line:rgba(140,200,212,.13); --line-2:rgba(140,200,212,.28);
+  --fog:#D3DCE0; --muted:#8597A0; --dim:#4D5D66;
+  --lamp:#7CCFDC; --agent:#D6A160; --ok:#8DC5A0; --warn:#D7896C;
+  --glow:0 0 0 transparent;
   --display:'Orbitron', 'JetBrains Mono', 'SF Mono', Menlo, monospace;
   --body:'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
   --mono:'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
@@ -25,50 +25,49 @@
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{margin:0;background:var(--ink);color:var(--fog);font:15px/1.65 var(--body);-webkit-font-smoothing:antialiased;overflow-x:hidden;
-  background-image:linear-gradient(rgba(0,229,255,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,.045) 1px,transparent 1px);background-size:56px 56px}
-body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:70;background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 3px);mix-blend-mode:multiply}
-::selection{background:var(--lamp);color:#001016}
+  background-image:linear-gradient(rgba(140,200,212,.028) 1px,transparent 1px),linear-gradient(90deg,rgba(140,200,212,.028) 1px,transparent 1px);background-size:56px 56px}
+::selection{background:rgba(124,207,220,.25);color:var(--fog)}
 a{color:var(--fog)}
-:focus-visible{outline:2px solid var(--lamp);outline-offset:3px;border-radius:6px}
-h1,h2,h3{font-family:var(--display);font-weight:700;letter-spacing:.01em;text-wrap:balance;margin:0;text-transform:uppercase;text-shadow:var(--glow)}
+:focus-visible{outline:2px solid var(--lamp);outline-offset:3px;border-radius:4px}
+h1,h2,h3{font-family:var(--display);font-weight:500;letter-spacing:.04em;text-wrap:balance;margin:0;text-transform:uppercase;text-shadow:var(--glow)}
 h3{text-transform:none;letter-spacing:0;font-family:var(--mono);text-shadow:none}
 p{margin:0}
 .wrap{max-width:var(--w);margin:0 auto;padding:0 24px}
 .mono{font-family:var(--mono)}
 .eyebrow{font:500 13px/1 var(--mono);color:var(--lamp);letter-spacing:.04em}
-.eyebrow::before{content:'$ ';color:var(--agent)}
+.eyebrow::before{content:'$ ';color:var(--dim)}
 
 /* progress + nav */
-.progress{position:fixed;inset:0 0 auto 0;height:2px;background:var(--lamp);box-shadow:var(--glow);transform-origin:0 50%;transform:scaleX(0);z-index:60}
-nav.top{position:fixed;inset:0 0 auto 0;z-index:50;backdrop-filter:blur(12px);background:rgba(2,6,10,.72);border-bottom:1px solid transparent;transition:border-color .3s}
+.progress{position:fixed;inset:0 0 auto 0;height:1px;background:var(--lamp);box-shadow:var(--glow);transform-origin:0 50%;transform:scaleX(0);z-index:60}
+nav.top{position:fixed;inset:0 0 auto 0;z-index:50;backdrop-filter:blur(12px);background:rgba(7,9,12,.78);border-bottom:1px solid transparent;transition:border-color .3s}
 nav.top.scrolled{border-bottom-color:var(--line)}
 nav.top .wrap{display:flex;align-items:center;justify-content:space-between;height:60px;gap:16px}
-.brand{display:flex;align-items:center;gap:10px;font:700 17px var(--display);letter-spacing:.12em;text-transform:uppercase;text-decoration:none;color:var(--lamp);text-shadow:var(--glow)}
+.brand{display:flex;align-items:center;gap:10px;font:500 15px var(--display);letter-spacing:.22em;text-transform:uppercase;text-decoration:none;color:var(--lamp);text-shadow:var(--glow)}
 .brand svg{flex:none}
 nav.top .links{display:flex;gap:6px;align-items:center}
-nav.top .links a{color:var(--muted);text-decoration:none;font-size:14px;padding:8px 12px;border-radius:8px}
+nav.top .links a{color:var(--muted);text-decoration:none;font-size:14px;padding:8px 12px;border-radius:4px}
 nav.top .links a:hover{color:var(--fog);background:var(--stone)}
 @media (max-width:720px){nav.top .links a.opt{display:none}}
 
-.btn{display:inline-flex;align-items:center;gap:8px;height:46px;padding:0 20px;border-radius:4px;font:600 14px var(--body);letter-spacing:.04em;text-transform:uppercase;text-decoration:none;border:1px solid var(--line);color:var(--fog);background:var(--stone);cursor:pointer;transition:transform .2s, background .2s}
+.btn{display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 20px;border-radius:2px;font:500 13px var(--body);letter-spacing:.08em;text-transform:uppercase;text-decoration:none;border:1px solid var(--line);color:var(--fog);background:var(--stone);cursor:pointer;transition:transform .2s, background .2s}
 .btn:hover{transform:translateY(-1px);background:var(--stone-2)}
-.btn.primary{background:rgba(0,229,255,.08);color:var(--lamp);border-color:var(--lamp);box-shadow:var(--glow), inset 0 0 12px rgba(0,229,255,.18)}
-.btn.primary:hover{background:var(--lamp);color:#001016}
+.btn.primary{background:rgba(124,207,220,.06);color:var(--lamp);border-color:var(--line-2)}
+.btn.primary:hover{background:rgba(124,207,220,.12);border-color:var(--lamp)}
 
 /* hero */
 .hero{position:relative;padding:150px 0 110px;overflow:hidden;border-bottom:1px solid var(--line)}
-.hero canvas{position:absolute;inset:0;width:100%;height:100%;opacity:.9}
+.hero canvas{position:absolute;inset:0;width:100%;height:100%;opacity:.8}
 .hero .wrap{position:relative;display:grid;grid-template-columns:minmax(0,1fr);gap:28px}
-.hero h1{font-size:clamp(40px,7vw,92px);line-height:1.02;font-weight:900;max-width:13ch}
-.hero h1::after{content:'';display:inline-block;width:.5em;height:.82em;margin-left:.12em;vertical-align:-.06em;background:var(--lamp);box-shadow:var(--glow);animation:blink 1.1s steps(1) infinite}
+.hero h1{font-size:clamp(36px,5.6vw,72px);line-height:1.08;font-weight:500;max-width:15ch}
+.hero h1::after{content:'';display:inline-block;width:.5em;height:.82em;margin-left:.12em;vertical-align:-.06em;background:var(--lamp);opacity:.7;width:.42em;height:.72em;animation:blink 1.1s steps(1) infinite}
 @keyframes blink{50%{opacity:0}}
-.hero h1 .glow{color:var(--lamp);text-shadow:0 0 28px rgba(0,229,255,.75)}
-.hero .lede{font-size:clamp(16px,1.7vw,19px);color:var(--muted);max-width:56ch;text-shadow:0 0 10px #02060A,0 0 4px #02060A}
+.hero h1 .glow{color:var(--lamp)}
+.hero .lede{font-size:clamp(15px,1.5vw,17px);color:var(--muted);max-width:58ch;text-shadow:0 0 10px var(--ink),0 0 4px var(--ink)}
 .hero .cta{display:flex;gap:12px;flex-wrap:wrap}
-.cmd{display:inline-flex;align-items:center;gap:12px;max-width:100%;background:rgba(1,8,12,.9);border:1px solid var(--lamp);box-shadow:var(--glow);border-radius:6px;padding:10px 10px 10px 16px;font:14px var(--mono);color:var(--fog)}
+.cmd{justify-self:start;display:inline-flex;align-items:center;gap:12px;max-width:100%;background:rgba(7,9,12,.9);border:1px solid var(--line-2);border-radius:2px;padding:10px 10px 10px 16px;font:14px var(--mono);color:var(--fog)}
 .cmd code{overflow-x:auto;white-space:nowrap}
-.cmd .dollar{color:var(--agent)}
-.copy{flex:none;height:32px;padding:0 12px;border-radius:8px;border:1px solid var(--line);background:var(--stone-2);color:var(--muted);font:500 12px var(--body);cursor:pointer}
+.cmd .dollar{color:var(--dim)}
+.copy{flex:none;height:30px;padding:0 12px;border-radius:2px;border:1px solid var(--line);background:var(--stone-2);color:var(--muted);font:500 12px var(--body);cursor:pointer}
 .copy:hover{color:var(--fog)}
 .hero .meta{display:flex;gap:18px;flex-wrap:wrap;color:var(--dim);font:13px var(--mono)}
 
@@ -79,11 +78,11 @@ nav.top .links a:hover{color:var(--fog);background:var(--stone)}
 /* manifesto: words light up with scroll */
 .manifesto{padding:120px 0}
 .manifesto p{font:500 clamp(24px,3.4vw,44px)/1.3 var(--mono);letter-spacing:-.01em;max-width:30ch}
-.manifesto p::before{content:'> ';color:var(--agent)}
+.manifesto p::before{content:'> ';color:var(--dim)}
 .manifesto .w{color:var(--fog);transition:color .2s}
-.js .manifesto .w{color:#123540}
+.js .manifesto .w{color:#1C262C}
 .js .manifesto .w.lit{color:var(--fog)}
-.js .manifesto .w.lit.hot{color:var(--lamp);text-shadow:var(--glow)}
+.js .manifesto .w.lit.hot{color:var(--lamp)}
 
 /* pinned scenes */
 .scene{position:relative}
@@ -92,38 +91,39 @@ nav.top .links a:hover{color:var(--fog);background:var(--stone)}
 .scene .grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:56px;align-items:center}
 @media (max-width:900px){.scene .grid{grid-template-columns:1fr;gap:28px}.js .scene.tall{height:300vh}.scene .pin{align-items:flex-start;padding-top:80px}}
 .steps{display:grid;gap:6px;margin-top:28px}
-.step{padding:14px 16px;border-radius:6px;border:1px solid transparent;color:var(--dim);transition:all .4s}
+.step{padding:14px 16px;border-radius:2px;border:1px solid transparent;color:var(--dim);transition:all .4s}
 .step b{display:block;color:inherit;font:600 17px var(--body);margin-bottom:2px}
 .step span{font-size:15px}
-.step.on{color:var(--fog);background:rgba(0,229,255,.06);border-color:var(--lamp);box-shadow:var(--glow)}
+.step.on{color:var(--fog);background:rgba(124,207,220,.04);border-color:var(--line);border-left:2px solid var(--lamp)}
 .step.on b{color:var(--lamp)}
-.scene h2{font-size:clamp(34px,4.6vw,60px);line-height:1.02}
+.scene h2{font-size:clamp(26px,3.2vw,42px);line-height:1.1}
 .scene .sub{color:var(--muted);font-size:18px;margin-top:16px;max-width:44ch}
 @media (max-width:900px){.steps{grid-template-columns:repeat(2,1fr)}.step{padding:10px 12px}.step span{display:none}#guardSteps{display:none}.scene .sub{font-size:16px}}
 @media (max-width:640px){.term{min-height:0;font-size:11px}.term .body{padding:8px 10px}.roomline{font-size:12px;padding:8px 10px}.hero canvas{opacity:.45}}
 
 /* board */
-.board{background:rgba(6,17,26,.85);border:1px solid var(--lamp);border-radius:6px;padding:18px;box-shadow:0 0 0 1px rgba(0,229,255,.08), 0 0 40px rgba(0,229,255,.18)}
+.board{background:rgba(12,17,22,.9);border:1px solid var(--line-2);border-radius:4px;padding:18px}
 .board .bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
 .board .bar .who{display:flex}
 .av{width:30px;height:30px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font:700 11px var(--body);color:#0A0B0D;border:2px solid var(--stone);flex:none}
 .av + .av{margin-left:-8px}
 .lanes{position:relative;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;min-height:300px}
-.lane{background:var(--ink);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.lane{background:var(--ink);border-radius:4px;padding:10px;display:flex;flex-direction:column;gap:8px}
 .lane h4{margin:0 0 4px;font:600 12px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
-.card{background:var(--stone-2);border:1px solid var(--line);border-radius:6px;padding:10px;font-size:13px;line-height:1.35}
+.card{background:var(--stone-2);border:1px solid var(--line);border-radius:4px;padding:10px;font-size:13px;line-height:1.35}
 .card .id{font:11px var(--mono);color:var(--dim)}
 .card .t{font-weight:600;margin:3px 0 6px}
 .card .row{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
 .card .row .av{width:20px;height:20px;font-size:8px;border-width:0}
-.mover{position:absolute;background:#061C24 !important;width:calc(25% - 7.5px);top:34px;left:0;transition:none;z-index:2;box-shadow:0 0 22px rgba(255,158,61,.45);border-color:var(--agent) !important}
-.mover .state{display:inline-block;margin-top:6px;font:500 11px var(--mono);padding:2px 8px;border-radius:2px;background:rgba(255,158,61,.12);color:var(--agent)}
+.mover{position:absolute;background:#121B21 !important;width:calc(25% - 7.5px);top:34px;left:0;transition:none;z-index:2;border-color:rgba(214,161,96,.55) !important}
+.card .state{display:inline-block;margin-top:6px;font:500 11px var(--mono);padding:2px 8px}
+.mover .state{display:inline-block;margin-top:6px;font:500 11px var(--mono);padding:2px 8px;border-radius:2px;background:rgba(214,161,96,.1);color:var(--agent)}
 @media (max-width:560px){.lanes{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}.lane{padding:6px}.card{padding:7px;font-size:11px}.card .row{display:none}.lane h4{font-size:9px}.mover{width:calc(25% - 4.5px)}}
 
 /* terminals */
 .terms{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 @media (max-width:640px){.terms{grid-template-columns:1fr}}
-.term{background:rgba(1,8,12,.92);border:1px solid var(--lamp);box-shadow:0 0 24px rgba(0,229,255,.15);border-radius:6px;overflow:hidden;font:12.5px/1.65 var(--mono);min-height:240px}
+.term{background:rgba(7,9,12,.94);border:1px solid var(--line-2);border-radius:4px;overflow:hidden;font:12.5px/1.65 var(--mono);min-height:240px}
 .term .tb{display:flex;align-items:center;gap:6px;padding:9px 12px;border-bottom:1px solid var(--line);color:var(--muted);font-size:12px}
 .term .tb i{width:9px;height:9px;border-radius:50%;background:#2E3238}
 .term .tb span{margin-left:8px}
@@ -131,43 +131,43 @@ nav.top .links a:hover{color:var(--fog);background:var(--stone)}
 .ln{white-space:pre-wrap;word-break:break-word;transition:opacity .35s, transform .35s}
 .js .ln.off{opacity:0;transform:translateY(6px)}
 .ln .p{color:var(--lamp)} .ln .t{color:var(--agent)} .ln .m{color:var(--dim)} .ln .g{color:var(--ok)}
-.guard{margin-top:8px;border:1px solid var(--warn);border-radius:8px;padding:8px 10px;color:var(--fog);background:rgba(242,140,107,.07)}
+.guard{margin-top:8px;border:1px solid rgba(215,137,108,.45);border-radius:2px;padding:8px 10px;color:var(--fog);background:rgba(215,137,108,.05)}
 .guard b{color:var(--warn);font-weight:500}
-.roomline{margin-top:14px;display:flex;align-items:center;gap:10px;background:var(--stone);border:1px solid var(--line);border-radius:6px;padding:10px 14px;font-size:14px}
+.roomline{margin-top:14px;display:flex;align-items:center;gap:10px;background:var(--stone);border:1px solid var(--line);border-radius:4px;padding:10px 14px;font-size:14px}
 .roomline .dot{width:8px;height:8px;border-radius:50%;background:var(--agent);flex:none}
 
 /* features */
 .features{padding:130px 0 60px}
-.features h2,.works h2,.install h2{font-size:clamp(34px,4.6vw,60px);line-height:1.02;max-width:18ch}
+.features h2,.works h2,.install h2{font-size:clamp(26px,3.4vw,44px);line-height:1.1;max-width:22ch}
 .fgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:48px}
 @media (max-width:900px){.fgrid{grid-template-columns:1fr 1fr}}
 @media (max-width:560px){.fgrid{grid-template-columns:1fr}}
-.f{background:rgba(6,17,26,.75);border:1px solid var(--line);border-radius:6px;padding:24px;display:grid;gap:10px;align-content:start;transition:border-color .3s, transform .3s}
-.f:hover{border-color:var(--lamp);box-shadow:var(--glow);transform:translateY(-2px)}
+.f{background:rgba(12,17,22,.7);border:1px solid var(--line);border-radius:4px;padding:24px;display:grid;gap:10px;align-content:start;transition:border-color .3s, transform .3s}
+.f:hover{border-color:var(--line-2);transform:translateY(-2px)}
 .f svg{color:var(--lamp)}
 .f h3{font-size:22px}
 .f p{color:var(--muted);font-size:15px}
-.f code{font:13px var(--mono);color:var(--agent)}
+.f code{font:13px var(--mono);color:var(--lamp)}
 
 /* works with */
 .works{padding:110px 0}
 .agents{margin-top:44px;border-top:1px solid var(--line)}
 .agent{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:20px;align-items:center;padding:20px 0;border-bottom:1px solid var(--line)}
-.agent .n{font:700 clamp(20px,2.8vw,34px)/1.1 var(--display);letter-spacing:.04em;text-transform:uppercase}
-.agent:hover .n{color:var(--lamp);text-shadow:var(--glow)}
+.agent .n{font:500 clamp(18px,2.4vw,28px)/1.1 var(--display);letter-spacing:.06em;text-transform:uppercase}
+.agent:hover .n{color:var(--lamp)}
 .agent .how{color:var(--dim);font:13px var(--mono)}
-.tag{font:500 12px var(--mono);padding:5px 10px;border-radius:6px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
-.tag.full{color:var(--ok);border-color:rgba(57,255,136,.45);box-shadow:0 0 10px rgba(57,255,136,.2)}
+.tag{font:500 12px var(--mono);padding:5px 10px;border-radius:4px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.tag.full{color:var(--ok);border-color:rgba(141,197,160,.3)}
 @media (max-width:640px){.agent{grid-template-columns:1fr auto}.agent .how{display:none}}
 
 /* install */
 .install{padding:110px 0 140px}
 .tabs{display:flex;gap:6px;margin-top:40px;flex-wrap:wrap}
-.tabs button{height:42px;padding:0 16px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--muted);font:500 14px var(--body);cursor:pointer}
-.tabs button[aria-selected="true"]{background:rgba(0,229,255,.08);color:var(--lamp);border-color:var(--lamp);box-shadow:var(--glow)}
-.panel{margin-top:14px;background:var(--stone);border:1px solid var(--line);border-radius:6px;padding:22px;display:grid;gap:14px}
+.tabs button{height:42px;padding:0 16px;border-radius:4px;border:1px solid var(--line);background:transparent;color:var(--muted);font:500 14px var(--body);cursor:pointer}
+.tabs button[aria-selected="true"]{background:rgba(124,207,220,.06);color:var(--lamp);border-color:var(--line-2)}
+.panel{margin-top:14px;background:var(--stone);border:1px solid var(--line);border-radius:4px;padding:22px;display:grid;gap:14px}
 .panel[hidden]{display:none}
-.panel pre{margin:0;background:#010509;border:1px solid var(--line);border-radius:6px;padding:16px 18px;overflow-x:auto;font:14px/1.7 var(--mono);color:var(--fog)}
+.panel pre{margin:0;background:#050709;border:1px solid var(--line);border-radius:4px;padding:16px 18px;overflow-x:auto;font:14px/1.7 var(--mono);color:var(--fog)}
 .panel pre .c{color:var(--dim)}
 .panel p{color:var(--muted)}
 .panel .head{display:flex;justify-content:space-between;align-items:center;gap:12px}
@@ -190,7 +190,7 @@ footer a{color:var(--muted)}
 <nav class="top" id="nav" aria-label="Main">
   <div class="wrap">
     <a class="brand" href="#top">
-      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12" fill="none" stroke="#00E5FF" stroke-width="1.6"/><circle cx="13" cy="8" r="2.4" fill="#00E5FF"/><circle cx="8" cy="16.5" r="2.4" fill="#FF9E3D"/><circle cx="18" cy="16.5" r="2.4" fill="#D8F6FF"/><path d="M13 8 8 16.5h10Z" fill="none" stroke="#D8F6FF" stroke-width="1"/></svg>
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12" fill="none" stroke="#7CCFDC" stroke-opacity=".7" stroke-width="1.2"/><circle cx="13" cy="8" r="2.2" fill="#7CCFDC"/><circle cx="8" cy="16.5" r="2.2" fill="#D6A160"/><circle cx="18" cy="16.5" r="2.2" fill="#D3DCE0"/><path d="M13 8 8 16.5h10Z" fill="none" stroke="#D3DCE0" stroke-opacity=".6" stroke-width=".9"/></svg>
       Batcave
     </a>
     <div class="links">
@@ -206,8 +206,8 @@ footer a{color:var(--muted)}
 <header class="hero" id="top">
   <canvas id="net" aria-hidden="true"></canvas>
   <div class="wrap">
-    <span class="eyebrow">batcave --version  v0.3 · open source · MIT</span>
-    <h1>Your agents, on the <span class="glow">same team.</span></h1>
+    <span class="eyebrow">batcave --version  v0.4 · open source · MIT</span>
+    <h1>Your agents,<br>on the <span class="glow">same team.</span></h1>
     <p class="lede">Batcave gives every coding agent on your team one board, live presence, shared decisions and a guard that stops them from overwriting each other. Everyone keeps their own agent and their own account.</p>
     <div class="cta">
       <a class="btn primary" href="#install">Get started</a>
@@ -242,27 +242,27 @@ footer a{color:var(--muted)}
         <div class="bar">
           <span class="mono" style="color:var(--muted);font-size:13px">wayne-tech · board</span>
           <span class="who">
-            <span class="av" style="background:#00E5FF">AS</span><span class="av" style="background:#FF9E3D">TD</span><span class="av" style="background:#D8F6FF">BG</span><span class="av" style="background:#39FF88">LF</span>
+            <span class="av" style="background:#7CCFDC">AS</span><span class="av" style="background:#D6A160">TD</span><span class="av" style="background:#B9C6CC">BG</span><span class="av" style="background:#8DC5A0">LF</span>
           </span>
         </div>
         <div class="lanes" id="lanes">
           <div class="lane"><h4>Claimed</h4>
-            <div class="card" style="visibility:hidden"><div class="id">.</div><div class="t">.</div><div class="row">.</div></div>
-            <div class="card"><div class="id">T-5 · plan step 5</div><div class="t">Checkout copy pass</div><div class="row"><span class="av" style="background:#D8F6FF">BG</span>Barbara</div></div>
+            <div class="card" style="visibility:hidden"><div class="id">.</div><div class="t">.<br>.</div><div class="row">.</div><span class="state">.</span></div>
+            <div class="card"><div class="id">T-5 · plan step 5</div><div class="t">Checkout copy pass</div><div class="row"><span class="av" style="background:#B9C6CC">BG</span>Barbara</div></div>
           </div>
           <div class="lane"><h4>Running</h4>
-            <div class="card" style="visibility:hidden"><div class="id">.</div><div class="t">.</div><div class="row">.</div></div>
-            <div class="card"><div class="id">T-4 · plan step 2</div><div class="t">Audit surface tokens</div><div class="row"><span class="av" style="background:#FF9E3D">TD</span>Codex</div></div>
+            <div class="card" style="visibility:hidden"><div class="id">.</div><div class="t">.<br>.</div><div class="row">.</div><span class="state">.</span></div>
+            <div class="card"><div class="id">T-4 · plan step 2</div><div class="t">Audit surface tokens</div><div class="row"><span class="av" style="background:#D6A160">TD</span>Codex</div></div>
           </div>
           <div class="lane"><h4>Review</h4>
-            <div class="card" style="visibility:hidden"><div class="id">.</div><div class="t">.</div><div class="row">.</div></div>
-            <div class="card"><div class="id">T-6 · issue #362</div><div class="t">Refund webhook retries</div><div class="row"><span class="av" style="background:#39FF88">LF</span>PR #409</div></div>
+            <div class="card" style="visibility:hidden"><div class="id">.</div><div class="t">.<br>.</div><div class="row">.</div><span class="state">.</span></div>
+            <div class="card"><div class="id">T-6 · issue #362</div><div class="t">Refund webhook retries</div><div class="row"><span class="av" style="background:#8DC5A0">LF</span>PR #409</div></div>
           </div>
           <div class="lane"><h4>Done</h4>
-            <div class="card" style="visibility:hidden"><div class="id">.</div><div class="t">.</div><div class="row">.</div></div>
-            <div class="card"><div class="id">T-1</div><div class="t">Extract checkout header</div><div class="row"><span class="av" style="background:#00E5FF">AS</span>yesterday</div></div>
+            <div class="card" style="visibility:hidden"><div class="id">.</div><div class="t">.<br>.</div><div class="row">.</div><span class="state">.</span></div>
+            <div class="card"><div class="id">T-1</div><div class="t">Extract checkout header</div><div class="row"><span class="av" style="background:#7CCFDC">AS</span>yesterday</div></div>
           </div>
-          <div class="card mover" id="mover"><div class="id">T-9 · plan step 4</div><div class="t">Dark mode receipts</div><div class="row"><span class="av" style="background:#00E5FF">AS</span>Aman · Claude Code</div><span class="state" id="moverState">claimed</span></div>
+          <div class="card mover" id="mover"><div class="id">T-9 · plan step 4</div><div class="t">Dark mode receipts</div><div class="row"><span class="av" style="background:#7CCFDC">AS</span>Aman · Claude Code</div><span class="state" id="moverState">claimed</span></div>
         </div>
       </div>
     </div>
@@ -484,7 +484,7 @@ node server/src/index.mjs</pre>
 
   // hero: a perspective light grid with agents racing toward one horizon node
   const cv = $('#net'), ctx = cv.getContext('2d');
-  const CY = '#00E5FF', OR = '#FF9E3D';
+  const CY = '#7CCFDC', OR = '#D6A160';
   let W, H, hy, vx, cycles = [], t0 = performance.now();
   function size() {
     const dpr = Math.min(2, devicePixelRatio || 1);
@@ -499,13 +499,13 @@ node server/src/index.mjs</pre>
     const t = now - t0;
     ctx.clearRect(0, 0, W, H);
     const g = ctx.createLinearGradient(0, hy - 40, 0, H);
-    g.addColorStop(0, 'rgba(0,229,255,0.0)'); g.addColorStop(1, 'rgba(0,229,255,0.07)');
+    g.addColorStop(0, 'rgba(124,207,220,0.0)'); g.addColorStop(1, 'rgba(124,207,220,0.035)');
     ctx.fillStyle = g; ctx.fillRect(0, hy, W, H - hy);
     ctx.lineWidth = 1;
     // converging lines
     for (let i = -10; i <= 10; i++) {
       const [x1, y1] = proj(i / 10 * 1.6, 0), [x2, y2] = proj(i / 10 * 1.6, 1);
-      ctx.strokeStyle = 'rgba(0,229,255,0.16)'; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      ctx.strokeStyle = 'rgba(124,207,220,0.08)'; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
     }
     // rows sliding toward the viewer
     const off = reduce ? 0 : (t * 0.00012) % (1 / 14);
@@ -513,21 +513,21 @@ node server/src/index.mjs</pre>
       const d = 1 - (r / 14 + off);
       if (d <= 0 || d >= 1) continue;
       const [xa, y] = proj(-1.6, d), [xb] = proj(1.6, d);
-      ctx.strokeStyle = `rgba(0,229,255,${0.05 + 0.25 * (1 - d)})`; ctx.beginPath(); ctx.moveTo(xa, y); ctx.lineTo(xb, y); ctx.stroke();
+      ctx.strokeStyle = `rgba(124,207,220,${0.03 + 0.12 * (1 - d)})`; ctx.beginPath(); ctx.moveTo(xa, y); ctx.lineTo(xb, y); ctx.stroke();
     }
     // horizon line and node
-    ctx.strokeStyle = 'rgba(0,229,255,0.5)'; ctx.shadowColor = CY; ctx.shadowBlur = 12;
+    ctx.strokeStyle = 'rgba(124,207,220,0.28)';
     ctx.beginPath(); ctx.moveTo(0, hy); ctx.lineTo(W, hy); ctx.stroke();
-    ctx.fillStyle = CY; ctx.beginPath(); ctx.arc(vx, hy, 4.5, 0, 7); ctx.fill();
+    ctx.fillStyle = CY; ctx.beginPath(); ctx.arc(vx, hy, 3, 0, 7); ctx.fill();
     // light cycles: ride their lane toward the node, leaving a glowing trail
     for (const c of cycles) {
       if (!reduce) c.z += c.v * 16;
       if (c.z >= 0.98) { c.z = 0.02; c.trail = []; }
       const p = proj(c.x * (1 - c.z), c.z);
       c.trail.push(p); if (c.trail.length > 46) c.trail.shift();
-      ctx.strokeStyle = c.c; ctx.shadowColor = c.c; ctx.shadowBlur = 14; ctx.lineWidth = 2.4;
+      ctx.strokeStyle = c.c; ctx.globalAlpha = 0.55; ctx.lineWidth = 1.4;
       ctx.beginPath(); c.trail.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke();
-      ctx.fillStyle = '#E8FDFF'; ctx.beginPath(); ctx.arc(p[0], p[1], 2.6, 0, 7); ctx.fill();
+      ctx.globalAlpha = 0.9; ctx.fillStyle = '#D3DCE0'; ctx.beginPath(); ctx.arc(p[0], p[1], 1.8, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
     }
     ctx.shadowBlur = 0; ctx.lineWidth = 1;
     if (!reduce) requestAnimationFrame(draw);

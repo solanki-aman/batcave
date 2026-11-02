@@ -266,36 +266,100 @@ async function answer($, req, action) {
 }
 
 // ---- drawing ----------------------------------------------------------------
+//
+// The look: the Grid, quietly. Hairline frames, one cool accent for "live",
+// one warm accent for "needs you", everything else muted. No blocks of color.
+
+const C = {
+  fg: "#D3DCE0",     // primary text
+  mut: "#8597A0",    // secondary text
+  dim: "#4D5D66",    // labels, separators
+  line: "#2B3B43",   // frames and rules
+  cy: "#7CCFDC",     // live: running agents, focus, your claim
+  amb: "#D6A160",    // needs you: requests, review, held edits
+  ok: "#8DC5A0",     // online
+  warn: "#D7896C",   // guard
+};
+const PANE_W = 60;
+const GLYPH = { backlog: "○", claimed: "◇", running: "◆", review: "◈", done: "·" };
+const TONE = { backlog: C.mut, claimed: C.fg, running: C.cy, review: C.amb, done: C.dim };
+
+function sep(Text, key) {
+  return Text({ key, color: C.line, children: " │ " });
+}
+
+// "── LABEL ───────────── 03": a section rule with a right-aligned count
+function rule(Text, key, label, count, width) {
+  const tail = count === undefined ? "" : ` ${String(count).padStart(2, "0")}`;
+  const fill = Math.max(2, width - label.length - tail.length - 4);
+  return Text({ key, children: [
+    Text({ key: "a", color: C.line, children: "── " }),
+    Text({ key: "b", color: C.mut, children: label }),
+    Text({ key: "c", color: C.line, children: ` ${"─".repeat(fill)}` }),
+    Text({ key: "d", color: C.dim, children: tail }),
+  ] });
+}
+
+function fit(text, n) {
+  const s = String(text ?? "");
+  return s.length > n ? `${s.slice(0, Math.max(0, n - 1))}…` : s.padEnd(n);
+}
 
 function band($, t, columns) {
   const { Box, Text, Button } = t;
   if (state.error) {
-    return Box({ flexDirection: "row", paddingX: 1, children: [Text({ color: "red", children: "○ batcave offline" }), Text({ dimColor: true, children: `  ${state.error}` })] });
+    return Box({ flexDirection: "row", paddingX: 1, children: [
+      Text({ key: "m", color: C.line, children: "▍" }),
+      Text({ key: "n", color: C.mut, children: "batcave" }),
+      sep(Text, "s"),
+      Text({ key: "e", color: C.warn, children: "offline" }),
+      Text({ key: "d", color: C.dim, wrap: "truncate-end", children: `  ${state.error}` }),
+    ] });
   }
   const team = state.team;
-  if (!team) return Text({ dimColor: true, children: " ◆ batcave connecting..." });
+  if (!team) return Box({ paddingX: 1, children: [Text({ color: C.dim, children: "▍batcave · connecting" })] });
   const me = state.cfg.user;
   const online = team.people.filter((p) => p.presence !== "offline" && p.presence !== "away").length;
   const reqs = team.requests.filter((r) => r.to === me).length;
   const mine = team.tasks.find((x) => x.owner === me && (x.status === "claimed" || x.status === "running"));
-  const busy = team.people.filter((p) => p.id !== me && p.presence === "agent running").slice(0, columns >= 140 ? 2 : 1);
+  const busy = team.people.filter((p) => p.id !== me && p.presence === "agent running").slice(0, columns >= 150 ? 2 : 1);
   const saved = state.stats?.tokens?.saved ?? 0;
-  const parts = [
-    Text({ key: "dot", color: "green", children: "◆ " }),
-    Text({ key: "team", bold: true, children: team.team }),
-    Text({ key: "on", dimColor: true, children: ` · ${online} online` }),
-  ];
-  if (reqs) parts.push(Text({ key: "req", color: "yellow", bold: true, children: ` · ${reqs} request${reqs > 1 ? "s" : ""}` }));
   const suggestion = mine ? null : team.people.find((p) => p.id === me)?.suggestion;
-  if (suggestion) parts.push(Text({ key: "mine", color: "cyan", children: ` · looks like ${suggestion.task}: ${suggestion.title}`, wrap: "truncate-end" }));
-  else parts.push(Text({ key: "mine", children: mine ? ` · ${mine.id} ${mine.status}` : " · no claim" }));
-  if (columns >= 100) for (const p of busy) parts.push(Text({ key: `b-${p.id}`, color: "cyan", children: ` · ${p.name}: ${p.now || "working"}`, wrap: "truncate-end" }));
-  if (columns >= 120 && saved) parts.push(Text({ key: "saved", dimColor: true, children: ` · ${short(saved)} tok saved` }));
+
+  const parts = [
+    Text({ key: "m", color: C.cy, children: "▍" }),
+    Text({ key: "n", color: C.cy, children: "batcave " }),
+    Text({ key: "t", color: C.fg, children: team.team }),
+    sep(Text, "s1"),
+    Text({ key: "o", color: C.ok, children: "● " }),
+    Text({ key: "on", color: C.mut, children: `${online} online` }),
+  ];
+  if (reqs) parts.push(sep(Text, "s2"), Text({ key: "req", color: C.amb, children: `${reqs} request${reqs > 1 ? "s" : ""}` }));
+  parts.push(sep(Text, "s3"));
+  if (suggestion) {
+    parts.push(Text({ key: "mine", color: C.mut, children: [Text({ key: "a", color: C.dim, children: "looks like " }), Text({ key: "b", color: C.cy, children: suggestion.task }), Text({ key: "c", children: ` ${fit(suggestion.title, 40).trimEnd()}` })] }));
+  } else if (mine) {
+    parts.push(Text({ key: "mine", children: [Text({ key: "g", color: TONE[mine.status], children: `${GLYPH[mine.status]} ` }), Text({ key: "i", color: C.fg, children: mine.id }), Text({ key: "s", color: C.mut, children: ` ${mine.status}` })] }));
+  } else {
+    parts.push(Text({ key: "mine", color: C.dim, children: "no claim" }));
+  }
+  // optional segments, added while they fit: teammates' agents, then savings
+  const buttonCols = (suggestion ? 14 : 0) + 18 + (reqs ? 12 : 0);
+  let used = 30 + (reqs ? 13 : 0) + (suggestion ? 14 + suggestion.title.length : mine ? 16 : 11);
+  for (const p of busy) {
+    const now = fit(p.now || "working", 30).trimEnd();
+    const len = 3 + p.name.length + 3 + now.length;
+    if (used + len > columns - buttonCols) break;
+    used += len;
+    parts.push(sep(Text, `s-${p.id}`), Text({ key: `b-${p.id}`, children: [Text({ key: "n", color: C.cy, children: p.name.toLowerCase() }), Text({ key: "a", color: C.dim, children: " › " }), Text({ key: "w", color: C.mut, children: now })] }));
+  }
+  if (saved && used + 18 <= columns - buttonCols) parts.push(sep(Text, "s4"), Text({ key: "saved", color: C.dim, children: `${short(saved)} tok saved` }));
+
   const buttons = columns >= 90 ? [
-    ...(suggestion ? [Button({ key: "suggest", label: `Claim ${suggestion.task}`, hotkey: "c", onPress: () => claim($, suggestion.task) })] : []),
-    Button({ key: "board", label: "Board", hotkey: "b", onPress: () => openPane($, 0) }),
-    Button({ key: "team", label: "Team", hotkey: "t", onPress: () => openPane($, 1) }),
-    ...(reqs ? [Button({ key: "requests", label: "Requests", hotkey: "q", onPress: () => openPane($, 2) })] : []),
+    ...(suggestion ? [Button({ key: "suggest", label: `claim ${suggestion.task}`, hotkey: "c", variant: "primary", onPress: () => claim($, suggestion.task) })] : []),
+    Button({ key: "board", label: "board", hotkey: "b", plain: true, dimColor: true, onPress: () => openPane($, 0) }),
+    Button({ key: "team", label: "team", hotkey: "t", plain: true, dimColor: true, onPress: () => openPane($, 1) }),
+    ...(reqs ? [Button({ key: "requests", label: "requests", hotkey: "q", plain: true, onPress: () => openPane($, 2) })] : []),
   ] : [];
   return Box({ flexDirection: "row", paddingX: 1, gap: 2, children: [Box({ key: "line", flexDirection: "row", flexShrink: 1, children: parts }), ...buttons] });
 }
@@ -303,7 +367,7 @@ function band($, t, columns) {
 function paneView($, t, e, inBand) {
   const { Box, Text, Button } = t;
   const tabs = TABS.map((name, i) => Button({
-    key: `tab-${i}`, label: name, hotkey: String(i + 1), plain: i !== state.tab, autoFocus: i === state.tab,
+    key: `tab-${i}`, label: name.toLowerCase(), hotkey: String(i + 1), plain: true, dimColor: i !== state.tab, autoFocus: i === state.tab,
     onPress: () => { state.tab = i; $.ui.invalidate("ui.render"); },
   }));
   const close = () => {
@@ -312,39 +376,55 @@ function paneView($, t, e, inBand) {
     state.paneInBand = false;
     $.ui.invalidate("ui.render");
   };
+  const width = Math.min(PANE_W, Math.max(40, (e.bodyColumns ?? e.columns ?? PANE_W + 4) - 4));
   let body;
-  if (!state.team) body = [Text({ key: "x", dimColor: true, children: state.error || "Loading..." })];
-  else if (state.tab === 0) body = boardTab($, t, inBand ? Math.max(4, (e.maxRows || 16) - 6) : 14);
-  else if (state.tab === 1) body = teamTab(t);
-  else if (state.tab === 2) body = requestsTab($, t);
-  else body = statsTab(t);
+  if (!state.team) body = [Text({ key: "x", color: C.dim, children: state.error || "loading" })];
+  else if (state.tab === 0) body = boardTab($, t, inBand ? Math.max(4, (e.maxRows || 16) - 6) : 14, width);
+  else if (state.tab === 1) body = teamTab(t, width);
+  else if (state.tab === 2) body = requestsTab($, t, width);
+  else body = statsTab(t, width);
   return Box({
-    flexDirection: "column", borderStyle: "round", borderColor: "cyan", paddingX: 1,
+    flexDirection: "column", borderStyle: "single", borderColor: C.line, paddingX: 1,
     children: [
       Box({ key: "head", flexDirection: "row", justifyContent: "space-between", children: [
-        Text({ bold: true, color: "cyan", children: `◆ Batcave · ${state.team?.team ?? ""}` }),
-        Button({ key: "close", label: "Close", hotkey: "x", plain: true, onPress: close }),
+        Text({ key: "title", children: [
+          Text({ key: "m", color: C.cy, children: "▍batcave" }),
+          Text({ key: "s", color: C.line, children: " // " }),
+          Text({ key: "t", color: C.mut, children: state.team?.team ?? "" }),
+        ] }),
+        Button({ key: "close", label: "close", hotkey: "x", plain: true, dimColor: true, onPress: close }),
       ] }),
-      Box({ key: "tabs", flexDirection: "row", gap: 1, children: tabs }),
-      Box({ key: "body", flexDirection: "column", marginTop: 1, children: body }),
+      Box({ key: "tabs", flexDirection: "row", gap: 2, children: tabs }),
+      Text({ key: "rule", color: C.line, children: "─".repeat(width) }),
+      Box({ key: "body", flexDirection: "column", children: body }),
     ],
   });
 }
 
-function boardTab($, t, rows) {
+function boardTab($, t, rows, width) {
   const { Box, Text, Button } = t;
   const out = [];
   let hot = 0;
+  const me = state.cfg.user;
   for (const [status, label] of LANES) {
-    const list = state.team.tasks.filter((x) => x.status === status).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, status === "done" ? 2 : 4);
-    out.push(Text({ key: `h-${status}`, bold: true, color: "cyan", children: `${label.toUpperCase()} ${state.team.tasks.filter((x) => x.status === status).length}` }));
+    const all = state.team.tasks.filter((x) => x.status === status);
+    const list = all.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, status === "done" ? 2 : 4);
+    out.push(rule(Text, `h-${status}`, label.toUpperCase(), all.length, width));
+    if (!list.length) out.push(Text({ key: `e-${status}`, color: C.dim, children: "   ·" }));
     for (const task of list) {
-      const who = task.owner ? ` · ${nameOf(task.owner)}` : "";
-      const stale = task.stale ? " · stale" : "";
-      const row = [Text({ key: "t", wrap: "truncate-end", children: `  ${task.id}  ${task.title}${who}${stale}` })];
+      const owner = task.owner ? (task.owner === me ? "you" : nameOf(task.owner).toLowerCase()) : "";
+      const flag = task.paused ? "paused" : task.stale ? "stale" : task.duplicateOf ? `dup ${task.duplicateOf.task}` : "";
+      const titleW = Math.max(12, width - 30);
+      const row = [Text({ key: "t", wrap: "truncate-end", children: [
+        Text({ key: "g", color: TONE[status], children: ` ${GLYPH[status]} ` }),
+        Text({ key: "i", color: task.owner === me ? C.cy : C.dim, children: fit(task.id, 6) }),
+        Text({ key: "n", color: status === "done" ? C.dim : C.fg, children: fit(task.title, titleW) }),
+        Text({ key: "o", color: C.mut, children: ` ${fit(owner, 9)}` }),
+        Text({ key: "f", color: task.stale ? C.warn : C.dim, children: flag ? ` ${flag}` : "" }),
+      ] })];
       if ((status === "backlog" || task.stale) && hot < 9) {
         hot += 1;
-        row.push(Button({ key: "c", label: task.stale ? "Take over" : "Claim", hotkey: String.fromCharCode(96 + hot), plain: true, onPress: () => claim($, task.id) }));
+        row.push(Button({ key: "c", label: task.stale ? "take over" : "claim", hotkey: String.fromCharCode(96 + hot), plain: true, dimColor: true, onPress: () => claim($, task.id) }));
       }
       out.push(Box({ key: `r-${task.id}`, flexDirection: "row", justifyContent: "space-between", children: row }));
     }
@@ -352,66 +432,113 @@ function boardTab($, t, rows) {
   return out.slice(0, rows + 5);
 }
 
-function teamTab(t) {
+function teamTab(t, width) {
   const { Box, Text } = t;
   const order = { "agent running": 0, online: 1, away: 2, offline: 3 };
-  const color = { "agent running": "cyan", online: "green", away: "yellow", offline: undefined };
-  return [...state.team.people].sort((a, b) => order[a.presence] - order[b.presence]).map((p) => Box({
-    key: p.id, flexDirection: "column", marginBottom: 1, children: [
-      Box({ flexDirection: "row", gap: 1, children: [
-        Text({ bold: true, children: `${p.name}${p.id === state.cfg.user ? " (you)" : ""}` }),
-        Text({ color: color[p.presence], dimColor: p.presence === "offline", children: p.presence }),
-        p.tool ? Text({ dimColor: true, children: `· ${p.tool}` }) : null,
+  const dot = { "agent running": C.cy, online: C.ok, away: C.amb, offline: C.dim };
+  const out = [rule(Text, "h", "TEAM", state.team.people.length, width)];
+  for (const p of [...state.team.people].sort((a, b) => order[a.presence] - order[b.presence])) {
+    const off = p.presence === "offline";
+    out.push(Box({ key: p.id, flexDirection: "column", children: [
+      Text({ key: "a", wrap: "truncate-end", children: [
+        Text({ key: "d", color: dot[p.presence], children: off ? " ○ " : " ● " }),
+        Text({ key: "n", color: off ? C.mut : C.fg, children: fit(`${p.name}${p.id === state.cfg.user ? " (you)" : ""}`, 16) }),
+        Text({ key: "p", color: p.presence === "agent running" ? C.cy : C.dim, children: fit(p.presence, 14) }),
+        Text({ key: "x", color: C.dim, children: p.tool ?? "" }),
       ] }),
-      Text({ dimColor: true, wrap: "truncate-end", children: `  now: ${p.now || "idle"}${p.task ? ` · ${p.task}` : ""}` }),
-      Text({ dimColor: true, children: `  week: ${p.stats.shipped} shipped · ${p.stats.prsOpen} PR open · ${p.stats.reviewsOwed} reviews owed` }),
-    ],
-  }));
+      Box({ key: "b", flexDirection: "row", justifyContent: "space-between", children: [
+        Text({ key: "l", wrap: "truncate-end", children: [
+          Text({ key: "a", color: C.line, children: "   └ " }),
+          Text({ key: "t", color: p.task ? C.mut : C.dim, children: p.task ? `${p.task} · ` : "" }),
+          Text({ key: "w", color: off ? C.dim : C.mut, children: fit(p.now || "idle", Math.max(10, width - 32)).trimEnd() }),
+        ] }),
+        Text({ key: "r", color: C.dim, children: `${p.stats.shipped} shipped · ${p.stats.reviewsOwed} owed` }),
+      ] }),
+    ] }));
+  }
+  return out;
 }
 
-function requestsTab($, t) {
+function requestsTab($, t, width) {
   const { Box, Text, Button } = t;
   const mine = state.team.requests.filter((r) => r.to === state.cfg.user);
-  if (!mine.length) return [Text({ key: "none", dimColor: true, children: "No requests for your agent." })];
-  return mine.slice(0, 5).map((r, i) => Box({
+  const out = [rule(Text, "h", "REQUESTS FOR YOUR AGENT", mine.length, width)];
+  if (!mine.length) return [...out, Text({ key: "none", color: C.dim, children: "   nothing waiting" })];
+  mine.slice(0, 5).forEach((r, i) => out.push(Box({
     key: `q-${r.id}`, flexDirection: "column", marginBottom: 1, children: [
-      Text({ wrap: "wrap", children: [Text({ bold: true, children: `R-${r.id} from ${nameOf(r.from)}: ` }), Text({ children: r.text })] }),
-      Box({ flexDirection: "row", gap: 2, children: [
-        Button({ key: "run", label: "Run on my agent", hotkey: String.fromCharCode(97 + i * 2), onPress: () => answer($, r, "accept") }),
-        Button({ key: "decline", label: "Decline", hotkey: String.fromCharCode(98 + i * 2), plain: true, onPress: () => answer($, r, "decline") }),
+      Text({ key: "h", children: [
+        Text({ key: "m", color: C.amb, children: " ▍" }),
+        Text({ key: "i", color: C.amb, children: `R-${r.id}` }),
+        Text({ key: "f", color: C.mut, children: `  from ${nameOf(r.from).toLowerCase()} · ${ago(r.at)}${r.routed ? " · routed" : ""}` }),
+      ] }),
+      Box({ key: "b", flexDirection: "row", children: [Text({ key: "m", color: C.amb, children: " ▍ " }), Text({ key: "t", color: C.fg, wrap: "wrap", children: r.text })] }),
+      Box({ key: "a", flexDirection: "row", gap: 2, marginLeft: 3, children: [
+        Button({ key: "run", label: "run on my agent", hotkey: String.fromCharCode(97 + i * 2), variant: "primary", onPress: () => answer($, r, "accept") }),
+        Button({ key: "decline", label: "decline", hotkey: String.fromCharCode(98 + i * 2), plain: true, dimColor: true, onPress: () => answer($, r, "decline") }),
       ] }),
     ],
-  }));
+  })));
+  return out;
 }
 
-function statsTab(t) {
+function meter(value, max, cells) {
+  const n = Math.max(0, Math.min(cells, Math.round((value / Math.max(1, max)) * cells)));
+  return { on: "▰".repeat(n), off: "▱".repeat(cells - n) };
+}
+
+function statsTab(t, width) {
   const { Text } = t;
   const s = state.stats;
-  if (!s) return [Text({ key: "none", dimColor: true, children: "No stats from the server." })];
+  if (!s) return [Text({ key: "none", color: C.dim, children: "   no stats from the server" })];
   const k = s.tokens;
-  const lat = Object.entries(s.latency).filter(([key]) => /^(hook:|alfred:)/.test(key)).slice(0, 6);
+  const lat = Object.entries(s.latency).filter(([key]) => /^(hook:|alfred:)/.test(key) && !key.endsWith(":failed")).slice(0, 6);
   const max = Math.max(1, ...lat.map(([, v]) => v.p95 || 0));
-  return [
-    Text({ key: "saved", children: [Text({ color: "green", bold: true, children: `${short(k.saved)} tokens saved` }), Text({ dimColor: true, children: `  (${k.savedPct}% of what agents would have received)` })] }),
-    Text({ key: "split", dimColor: true, children: `dedupe ${short(k.savedDedupe)} · Alfred ranking ${short(k.savedRanking)} · injected ${short(k.injected)}` }),
-    Text({ key: "alfred", dimColor: true, children: `Alfred: ${s.alfred?.ready ? `ready, ${s.alfred.model} on ${s.alfred.device}` : "not running"}` }),
-    Text({ key: "lh", bold: true, color: "cyan", children: "LATENCY p50 / p95" }),
-    ...lat.map(([key, v]) => Text({ key, wrap: "truncate-end", children: `${key.padEnd(18)} ${String(v.p50 ?? "-").padStart(6)} / ${String(v.p95 ?? "-").padEnd(6)} ${"█".repeat(Math.max(1, Math.round(((v.p95 || 0) / max) * 16)))}` })),
+  const pct = meter(k.savedPct ?? 0, 100, 20);
+  const out = [
+    rule(Text, "h1", "TOKENS", undefined, width),
+    Text({ key: "big", children: [Text({ key: "a", color: C.fg, children: `   ${short(k.saved)}` }), Text({ key: "b", color: C.mut, children: " saved  " }), Text({ key: "c", color: C.cy, children: pct.on }), Text({ key: "d", color: C.line, children: pct.off }), Text({ key: "e", color: C.mut, children: ` ${k.savedPct ?? 0}%` })] }),
+    Text({ key: "split", color: C.dim, children: `   dedupe ${short(k.savedDedupe)} · ranking ${short(k.savedRanking)} · sent ${short(k.injected)}` }),
+    Text({ key: "sp", children: " " }),
+    rule(Text, "h2", "LATENCY  p50 / p95 ms", undefined, width),
+    ...lat.map(([key, v]) => {
+      const m = meter(v.p95 || 0, max, 14);
+      return Text({ key, wrap: "truncate-end", children: [
+        Text({ key: "k", color: C.mut, children: `   ${fit(key, 18)}` }),
+        Text({ key: "v", color: C.fg, children: `${String(v.p50 ?? "-").padStart(5)} / ${String(v.p95 ?? "-").padEnd(5)} ` }),
+        Text({ key: "a", color: C.cy, children: m.on }), Text({ key: "b", color: C.line, children: m.off }),
+      ] });
+    }),
+    Text({ key: "sp2", children: " " }),
+    rule(Text, "h3", "ALFRED", undefined, width),
+    Text({ key: "alfred", children: s.alfred?.ready
+      ? [Text({ key: "a", color: C.ok, children: "   ● " }), Text({ key: "b", color: C.mut, children: `${s.alfred.model} on ${s.alfred.device}` })]
+      : [Text({ key: "a", color: C.dim, children: "   ○ " }), Text({ key: "b", color: C.dim, children: "not running · plain rules in use" })] }),
   ];
+  const q = Object.entries(s.alfred?.quality ?? {}).filter(([, v]) => v.withOutcome > 0).slice(0, 4);
+  for (const [key, v] of q) out.push(Text({ key: `q-${key}`, color: C.dim, children: `     ${fit(key.split(":")[0], 10)} ${String(v.rate ?? "-").padStart(5)}% taken · ${v.withOutcome} outcome${v.withOutcome === 1 ? "" : "s"}` }));
+  return out;
 }
 
 function guardView(t, held) {
   const { Box, Text, Button } = t;
   const decide = (choice) => () => { if (held.decision === null) held.decision = choice; };
   return Box({
-    flexDirection: "column", borderStyle: "round", borderColor: "yellow", paddingX: 1,
+    flexDirection: "column", borderStyle: "single", borderColor: C.warn, paddingX: 1,
     children: [
-      Text({ key: "title", bold: true, color: "yellow", children: `◆ Batcave guard · ${held.file}` }),
-      ...held.touches.slice(0, 4).map((x, i) => Text({ key: `w${i}`, children: `  ${x.name}'s agent edited it ${ago(x.at)}${x.task ? ` on ${x.task}` : ""}` })),
-      Text({ key: "q", dimColor: true, children: "Editing now may overwrite their work or cause a conflict." }),
-      Box({ key: "buttons", marginTop: 1, gap: 2, children: [
-        Button({ key: "proceed", label: "Proceed", hotkey: "1", plain: true, onPress: decide("proceed") }),
-        Button({ key: "cancel", label: "Cancel and ask them", hotkey: "2", autoFocus: true, onPress: decide("cancel") }),
+      Text({ key: "title", children: [
+        Text({ key: "m", color: C.warn, children: "▲ guard" }),
+        Text({ key: "s", color: C.line, children: " // " }),
+        Text({ key: "f", color: C.fg, children: held.file }),
+      ] }),
+      ...held.touches.slice(0, 4).map((x, i) => Text({ key: `w${i}`, children: [
+        Text({ key: "a", color: C.line, children: "  └ " }),
+        Text({ key: "n", color: C.amb, children: x.name.toLowerCase() }),
+        Text({ key: "b", color: C.mut, children: `'s agent edited it ${ago(x.at)}${x.task ? ` on ${x.task}` : ""}` }),
+      ] })),
+      Text({ key: "q", color: C.dim, children: "  editing now may overwrite their work" }),
+      Box({ key: "buttons", marginTop: 1, gap: 3, children: [
+        Button({ key: "cancel", label: "cancel and ask them", hotkey: "2", autoFocus: true, variant: "primary", onPress: decide("cancel") }),
+        Button({ key: "proceed", label: "proceed", hotkey: "1", plain: true, dimColor: true, onPress: decide("proceed") }),
       ] }),
     ],
   });

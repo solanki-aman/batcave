@@ -3,11 +3,11 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-141413?style=flat-square"></a>
-  <img alt="Node 18+" src="https://img.shields.io/badge/node-18%2B-141413?style=flat-square">
-  <img alt="Zero dependencies" src="https://img.shields.io/badge/dependencies-0-141413?style=flat-square">
-  <img alt="Supported agents: 7" src="https://img.shields.io/badge/agents-7-F2B544?style=flat-square">
-  <img alt="MCP server" src="https://img.shields.io/badge/MCP-server-F2B544?style=flat-square">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-0C1116?style=flat-square"></a>
+  <img alt="Node 18+" src="https://img.shields.io/badge/node-18%2B-0C1116?style=flat-square">
+  <img alt="Zero dependencies" src="https://img.shields.io/badge/dependencies-0-0C1116?style=flat-square">
+  <img alt="Supported agents: 7" src="https://img.shields.io/badge/agents-7-2A4A52?style=flat-square">
+  <img alt="MCP server" src="https://img.shields.io/badge/MCP-server-2A4A52?style=flat-square">
 </p>
 
 <p align="center">
@@ -26,12 +26,7 @@ Everyone keeps their own agent, their own machine and their own account. Batcave
 
 ## See it in action
 
-<p align="center"><img src="docs/assets/terminal.gif" alt="Aman on Claude Code and Tim on Codex sharing one Batcave: team context, board, claim, guard, decision, request, handoff, pulse and stats" width="100%"></p>
-
-<p align="center">
-  <a href="https://solanki-aman.github.io/batcave/"><img src="docs/assets/website.gif" alt="Scrolling through the Batcave website: the board scene, the guard scene, features, supported agents and install" width="100%"></a>
-</p>
-<p align="center"><sub>The <a href="https://solanki-aman.github.io/batcave/">website</a> plays a team's day as you scroll.</sub></p>
+<p align="center"><img src="docs/assets/terminal.gif" alt="The Batcave mod in Claude Code: the team band, a suggested card claimed with one key, a teammate request, the /cave pane with board, team, requests and stats tabs, and the guard holding an edit" width="100%"></p>
 
 ## Works with
 
@@ -49,15 +44,15 @@ Everyone keeps their own agent, their own machine and their own account. Batcave
 
 ## Inside Claude Code
 
-In Claude Code, Batcave is a mod. It draws the team above your prompt and holds risky edits in a pane:
+In Claude Code, Batcave is a mod. It draws the team above your prompt and holds risky edits in a pane. The recording above draws the mod's real output against a live server, inside a terminal mockup.
 
 ```text
-◆ wayne-tech · 5 online · 1 request · T-9 running · Tim: editing tokens.ts · 12.4k tok saved   [Board b] [Team t] [Requests q]
+▍batcave wayne-tech │ ● 5 online │ 1 request │ ◆ T-9 running │ tim › editing tokens.ts │ 12.4k tok saved   b board  t team  q requests
 ```
 
 - **Team band**, live above the prompt: who is online, what teammates' agents are doing, requests for you, your claim, tokens saved.
 - **`/cave` pane** with Board (claim with one key), Team, Requests (Run on my agent, Decline) and Stats tabs.
-- **Guard pane**: an edit to a file a teammate's agent just changed waits for Proceed or Cancel.
+- **Guard pane**: an edit to a file a teammate's agent just changed waits for Proceed or Cancel. Trivial overlaps pass with a toast.
 - **Toasts** for new requests, handoffs and decisions.
 
 Details in the [plugin README](plugin/README.md).

@@ -7,10 +7,12 @@ The Claude Code plugin for [Batcave](../README.md). It is a mod: besides the sla
 **The team band**, above the prompt, refreshed every 15 seconds and after every turn:
 
 ```text
-◆ wayne-tech · 5 online · 1 request · T-9 running · Tim: editing tokens.ts · 12.4k tok saved   [Board b] [Team t] [Requests q]
+▍batcave wayne-tech │ ● 5 online │ 1 request │ ◆ T-9 running │ tim › editing tokens.ts │ 12.4k tok saved   b board  t team  q requests
 ```
 
-Narrow terminals drop the teammate activity, then the savings, then the buttons.
+Narrow terminals drop the teammate activity, then the savings, then the buttons. When you start work with no claim and the prompt matches a backlog card, the band says `looks like T-10` and offers **claim T-10** on `c`.
+
+The look is deliberately quiet: hairline frames, muted text, cyan only for live work and your claim, amber only for what needs you.
 
 **The Batcave pane**, opened with `/cave` (or `/cave team`, `/cave requests`, `/cave stats`) or the band's buttons. Four tabs, switched with `1` to `4`:
 
@@ -19,18 +21,18 @@ Narrow terminals drop the teammate activity, then the savings, then the buttons.
 | Board | Backlog, Claimed, Running, Review, Done | **Claim** on backlog cards and **Take over** on stale ones. Claiming asks Claude to create the branch and brief you. |
 | Team | Each teammate's presence, agent, what it is doing now, and the week's numbers | |
 | Requests | Asks from teammates for your agent | **Run on my agent** submits the request as your prompt. **Decline** answers it. |
-| Stats | Tokens saved (dedupe and Alfred ranking), and hook and Alfred latency, p50 and p95 | |
+| Stats | Tokens saved (dedupe and Alfred ranking), hook and Alfred latency (p50 and p95), and how often Alfred's suggestions are taken | |
 
 **The guard pane.** When Claude is about to edit a file another teammate's agent changed recently, the edit is held in a pane:
 
 ```text
-╭──────────────────────────────────────────────────────────╮
-│ ◆ Batcave guard · src/theme/tokens.ts                     │
-│   Tim's agent edited it 4m ago on T-4                     │
-│ Editing now may overwrite their work or cause a conflict. │
-│                                                           │
-│ [1] Proceed    [2] Cancel and ask them                    │
-╰──────────────────────────────────────────────────────────╯
+┌──────────────────────────────────────────────────────────┐
+│ ▲ guard // src/theme/tokens.ts                           │
+│   └ tim's agent edited it 4m ago on T-4                  │
+│   editing now may overwrite their work                   │
+│                                                          │
+│ [2 cancel and ask them]   1 proceed                      │
+└──────────────────────────────────────────────────────────┘
 ```
 
 Cancel has the focus, so Enter keeps their work. Claude is told why it was stopped and to coordinate first. In a narrow terminal the pane is drawn in the band instead.
