@@ -29,6 +29,7 @@ const alfred = new Alfred(stats);
 const assist = new Assist({ alfred, stats, store, dataFile: DATA_FILE });
 const ALFRED_PAUSE_MS = Number(process.env.BATCAVE_ALFRED_PAUSE_MS || 45000);
 const ALFRED_COOLDOWN_MS = Number(process.env.BATCAVE_ALFRED_COOLDOWN_MIN || 30) * 60 * 1000;
+const AUTO_PER_HOUR = Number(process.env.BATCAVE_AUTO_WEIGHIN_PER_HOUR || 3);
 
 // ---------- helpers ----------
 
@@ -182,7 +183,7 @@ function contextLines(me, p, t, decisions, msgs) {
     for (const m of msgs) lines.push(`- ${person(m.author)?.name || m.author}: ${m.text}`);
   }
   const asked = db.requests.filter((r) => r.to === me && r.status === 'pending' && r.kind === 'alfred' && r.auto);
-  for (const r of asked) lines.push(`The user asked @alfred in #${r.room} (request R-${r.id}). Before anything else, resolve it with batcave_request_resolve ${r.id} accept and follow its brief.`);
+  for (const r of asked) lines.push(`${r.autoBy === 'setting' ? `Alfred brought this agent into #${r.room} (the user turned on auto weigh-in)` : `The user asked @alfred in #${r.room}`} (request R-${r.id}). Before anything else, resolve it with batcave_request_resolve ${r.id} accept and follow its brief.`);
   const reqs = db.requests.filter((r) => r.to === me && r.status === 'pending' && !(r.kind === 'alfred' && r.auto));
   if (reqs.length) {
     lines.push(`${reqs.length} pending request(s) for this user's agent. Do NOT act on them unless the user explicitly picks one (requests command or batcave_requests tool):`);
@@ -324,8 +325,16 @@ async function alfredOffer(room, gate, except = null) {
   if (!pool.length) return null;
   const hit = pool.length === 1 ? { person: pool[0] } : await assist.route(thread.map((m) => m.text).join('\n'), pool);
   const to = (hit?.person ?? pool[0]).id;
-  const r = createRequest('alfred', to, except ? `${gate.reason} in #${room}. Answer with your agent?` : `#${room} looks stuck (${gate.reason}). Weigh in with your agent?`, room);
-  r.kind = 'alfred'; r.auto = false; r.brief = briefFor(room, except ? gate.reason : `the team looks stuck (${gate.reason})`, r.id); r.logId = gate.logId;
+  // Auto weigh-in: people who opted in get the question run on their agent without
+  // a key press, up to AUTO_PER_HOUR times an hour; past that it is a plain offer.
+  const p = db.people[to];
+  const recentAuto = db.requests.filter((x) => x.kind === 'alfred' && x.to === to && x.autoBy === 'setting' && now() - x.at < 60 * 60 * 1000).length;
+  const auto = Boolean(p.autoWeighIn) && recentAuto < AUTO_PER_HOUR;
+  const why = except ? gate.reason : `the team looks stuck (${gate.reason})`;
+  const r = createRequest('alfred', to, auto ? `Alfred brought your agent into #${room}: ${why}.` : except ? `${gate.reason} in #${room}. Answer with your agent?` : `#${room} looks stuck (${gate.reason}). Weigh in with your agent?`, room);
+  r.kind = 'alfred'; r.auto = auto; if (auto) r.autoBy = 'setting';
+  r.brief = briefFor(room, auto ? `${why}, and ${p.name || to} lets Alfred bring their agent in` : why, r.id); r.logId = gate.logId;
+  if (auto) stats.count('alfred_auto_weighins');
   if (!except) lastOffer.set(room, now());
   stats.count('alfred_offers');
   broadcast('request', r);
@@ -426,6 +435,7 @@ route('POST', '/api/presence', ({ me, body }) => {
   if (typeof body.role === 'string') p.role = body.role.slice(0, 60);
   if (typeof body.branch === 'string') p.branch = body.branch.slice(0, 120);
   if (typeof body.tool === 'string') p.tool = body.tool.slice(0, 40);
+  if (typeof body.autoWeighIn === 'boolean') p.autoWeighIn = body.autoWeighIn;
   const t = activeTaskOf(me);
   p.task = t ? t.id : null;
   broadcast('person', publicPerson(p));
@@ -614,7 +624,7 @@ route('POST', '/api/requests/:id/resolve', ({ me, params, body }) => {
   if (r.routed) assist.outcome(r.routed.decisionId, r.status);
   broadcast('request', r);
   if (r.kind !== 'alfred') post(r.room, me, `${r.status} request from ${person(r.from)?.name || r.from}`, 'event', { request: r.id });
-  else if (r.status === 'accepted') post(r.room, me, r.auto ? 'asked their agent (@alfred)' : 'is weighing in with their agent', 'event', { request: r.id });
+  else if (r.status === 'accepted') post(r.room, me, r.autoBy === 'setting' ? 'brought in their agent (auto weigh-in)' : r.auto ? 'asked their agent (@alfred)' : 'is weighing in with their agent', 'event', { request: r.id });
   return r;
 });
 

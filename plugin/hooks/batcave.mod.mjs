@@ -40,6 +40,7 @@ const state = {
   paneInBand: false,
   seen: { requests: new Set(), handoffs: new Set(), decisions: new Set() },
   invoked: new Set(), // @alfred requests this session already took
+  busy: false,        // a main-loop turn is running; Alfred waits for it to end
   primed: false,
   held: null,         // guard hold: { file, touches, decision }
   timer: null,
@@ -64,9 +65,14 @@ export function register(on) {
     return { text: state.cfg ? `Batcave · ${TABS[state.tab]}` : "Batcave is not set up. Run /batcave:setup." };
   });
 
+  on("turn.start", async ($, e, next) => {
+    if (!e.agentId) state.busy = true;
+    return next(e);
+  });
+
   on("turn.complete", async ($, e, next) => {
     const result = await next(e);
-    if (!e.agentId) await refresh($);
+    if (!e.agentId) { state.busy = false; await refresh($); }
     return result;
   });
 
@@ -223,6 +229,7 @@ async function refresh($) {
 // The user asked for it, so there is nothing to confirm. If another session of
 // the same user claimed it first, the server says so and this one stays quiet.
 async function runAsked($, team) {
+  if (state.busy) return; // never cut into a running turn; the next turn.complete picks it up
   const me = state.cfg.user;
   for (const r of team.requests.filter((x) => x.to === me && x.kind === "alfred" && x.auto && !state.invoked.has(x.id))) {
     state.invoked.add(r.id);
@@ -231,7 +238,7 @@ async function runAsked($, team) {
     } catch {
       continue;
     }
-    $.ui.toast(`Batcave · @alfred: your agent is answering in #${r.room}`);
+    $.ui.toast(r.autoBy === "setting" ? `Batcave · Alfred brought your agent into #${r.room}` : `Batcave · @alfred: your agent is answering in #${r.room}`);
     await $.prompt.submit({ text: r.brief });
   }
 }
@@ -294,6 +301,16 @@ async function answer($, req, action) {
     }
   } catch (err) {
     $.ui.toast(`Batcave · ${String(err?.message ?? err).slice(0, 120)}`);
+  }
+  await refresh($);
+}
+
+async function setAuto($, on) {
+  try {
+    await api($, "POST", "/api/presence", { autoWeighIn: on });
+    $.ui.toast(on ? "Batcave · auto weigh-in on: Alfred can bring your agent into rooms" : "Batcave · auto weigh-in off: Alfred will ask first");
+  } catch (err) {
+    $.ui.toast(`Batcave · ${String(err?.message ?? err).slice(0, 100)}`);
   }
   await refresh($);
 }
@@ -416,7 +433,7 @@ function paneView($, t, e, inBand) {
   let body;
   if (!state.team) body = [Text({ key: "x", color: C.dim, children: state.error || "loading" })];
   else if (state.tab === 0) body = boardTab($, t, inBand ? Math.max(4, (e.maxRows || 16) - 6) : 14, width);
-  else if (state.tab === 1) body = teamTab(t, width);
+  else if (state.tab === 1) body = teamTab($, t, width);
   else if (state.tab === 2) body = requestsTab($, t, width);
   else body = statsTab(t, width);
   return Box({
@@ -468,11 +485,23 @@ function boardTab($, t, rows, width) {
   return out.slice(0, rows + 5);
 }
 
-function teamTab(t, width) {
-  const { Box, Text } = t;
+function teamTab($, t, width) {
+  const { Box, Text, Button } = t;
   const order = { "agent running": 0, online: 1, away: 2, offline: 3 };
   const dot = { "agent running": C.cy, online: C.ok, away: C.amb, offline: C.dim };
-  const out = [rule(Text, "h", "TEAM", state.team.people.length, width)];
+  const self = state.team.people.find((p) => p.id === state.cfg.user);
+  const autoOn = Boolean(self?.autoWeighIn);
+  const out = [
+    Box({ key: "auto", flexDirection: "row", justifyContent: "space-between", children: [
+      Text({ key: "l", children: [
+        Text({ key: "a", color: C.mut, children: " auto weigh-in " }),
+        Text({ key: "b", color: autoOn ? C.cy : C.dim, children: autoOn ? "on" : "off" }),
+        Text({ key: "c", color: C.dim, children: autoOn ? " · Alfred can bring your agent into rooms" : " · Alfred asks first" }),
+      ] }),
+      Button({ key: "t", label: autoOn ? "turn off" : "turn on", hotkey: "a", plain: true, dimColor: true, onPress: () => setAuto($, !autoOn) }),
+    ] }),
+    rule(Text, "h", "TEAM", state.team.people.length, width),
+  ];
   for (const p of [...state.team.people].sort((a, b) => order[a.presence] - order[b.presence])) {
     const off = p.presence === "offline";
     out.push(Box({ key: p.id, flexDirection: "column", children: [
@@ -480,7 +509,7 @@ function teamTab(t, width) {
         Text({ key: "d", color: dot[p.presence], children: off ? " ○ " : " ● " }),
         Text({ key: "n", color: off ? C.mut : C.fg, children: fit(`${p.name}${p.id === state.cfg.user ? " (you)" : ""}`, 16) }),
         Text({ key: "p", color: p.presence === "agent running" ? C.cy : C.dim, children: fit(p.presence, 14) }),
-        Text({ key: "x", color: C.dim, children: p.tool ?? "" }),
+        Text({ key: "x", color: C.dim, children: `${p.tool ?? ""}${p.autoWeighIn ? " · auto" : ""}` }),
       ] }),
       Box({ key: "b", flexDirection: "row", justifyContent: "space-between", children: [
         Text({ key: "l", wrap: "truncate-end", children: [

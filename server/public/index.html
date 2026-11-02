@@ -187,9 +187,10 @@ function renderPeople(){
     const task = S.state.tasks.find(t=>t.id===p.task);
     return `<article class="pcard" data-presence="${esc(p.presence)}">
       <div class="row"><span class="av" style="width:36px;height:36px;font-size:12px;${avColor(p.id)}">${initials(p.name)}</span>
-        <div style="flex:1"><div class="title">${esc(p.name)}${p.id===me?' <span class="meta">(you)</span>':''}</div><div class="meta">${esc(p.role||p.id)}${p.tool?' · '+esc(TOOLS[p.tool]||p.tool):''}</div></div>${badge}</div>
+        <div style="flex:1"><div class="title">${esc(p.name)}${p.id===me?' <span class="meta">(you)</span>':''}</div><div class="meta">${esc(p.role||p.id)}${p.tool?' · '+esc(TOOLS[p.tool]||p.tool):''}${p.autoWeighIn?' · auto weigh-in':''}</div></div>${badge}</div>
       <div class="now"><div class="meta">Now · ${ago(p.since||p.lastSeen)}</div><div>${esc(p.now||'idle')}</div>${task?`<div class="mono">${esc(task.id)} · ${esc(task.branch||task.title)}</div>`:''}</div>
       <div class="stats"><div><b>${p.stats.shipped}</b><span class="meta">shipped</span></div><div><b>${p.stats.prsOpen}</b><span class="meta">PRs open</span></div><div><b>${p.stats.reviewsOwed}</b><span class="meta">reviews owed</span></div></div>
+      ${p.id===me?`<div class="row" style="justify-content:space-between"><span class="meta">auto weigh-in · ${p.autoWeighIn?'Alfred can bring your agent into rooms':'Alfred asks first'}</span><button class="btn small" data-auto="${p.autoWeighIn?'0':'1'}">${p.autoWeighIn?'turn off':'turn on'}</button></div>`:''}
       ${p.id!==me?`<form class="row" data-ask="${esc(p.id)}"><label class="sr" for="ask-${esc(p.id)}">Ask ${esc(p.name)}'s agent</label><input id="ask-${esc(p.id)}" placeholder="Ask ${esc(p.name)}'s agent…" style="flex:1"><button class="btn small" type="submit">Request</button></form>`:''}
     </article>`;}).join('')}</div>`;
 }
@@ -260,6 +261,8 @@ document.addEventListener('click', async (e) => {
   if (pin) { const m = S.messages.find(x => String(x.id) === pin.dataset.pin); if (m) await api('POST','/api/decisions',{ text: m.text, room: m.room, fromMessage: m.id }); return refresh(); }
   const fb = e.target.closest('[data-fb]');
   if (fb) { await api('POST', `/api/messages/${fb.dataset.fb}/feedback`, { helpful: fb.dataset.helpful === '1' }); return refresh(); }
+  const au = e.target.closest('[data-auto]');
+  if (au) { await api('POST', '/api/presence', { autoWeighIn: au.dataset.auto === '1' }); return refresh(); }
   const d = e.target.closest('[data-retire]');
   if (d) { await api('POST', `/api/decisions/${d.dataset.retire}/retire`); return refresh(); }
 });
