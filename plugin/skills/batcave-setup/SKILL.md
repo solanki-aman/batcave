@@ -1,6 +1,6 @@
 ---
 name: batcave-setup
-description: Set up Batcave, the multiplayer layer for coding agents (Claude Code, Codex, Gemini CLI, Antigravity, Cursor, Copilot CLI, OpenCode, Kiro, Windsurf). Use when someone wants to join their team's Batcave, connect another agent, deploy a Batcave server, fix a broken install, or asks how to get started.
+description: Set up Batcave, the multiplayer layer for coding agents (Claude Code, Codex, Gemini CLI, Antigravity, Cursor, Copilot CLI, OpenCode). Use when someone wants to join their team's Batcave, connect another agent, deploy a Batcave server, fix a broken install, or asks how to get started.
 ---
 
 # Batcave setup
@@ -25,7 +25,7 @@ Confirm it is up with `curl <url>/api/health`; the response should show the team
 
 Run `node --version` and confirm it is 18 or newer, and confirm `git` is installed. Ask which agents they use if it is not obvious; `npx github:solanki-aman/batcave agents` lists the ones found on the machine.
 
-If they use agents other than Claude Code, Step 4 is a single command: `npx github:solanki-aman/batcave init --url <url> --token <token> --user <handle> --name "<name>"`, optionally with `--agent codex,cursor` to choose agents and `--repo` to add a Batcave section to the repo's `AGENTS.md`. It installs a runtime in `~/.batcave/runtime`, writes the config, and wires hooks, the MCP server and commands into each agent's own config with backups. Read its output back to the person, including any agent marked tools only, then go to Step 6.
+If they use agents other than Claude Code, Step 4 is a single command: `npx github:solanki-aman/batcave init --url <url> --token <token> --user <handle> --name "<name>"`, optionally with `--agent codex,cursor` to choose agents and `--repo` to add a Batcave section to the repo's `AGENTS.md`. It installs a runtime in `~/.batcave/runtime`, writes the config, and wires hooks, the MCP server and commands into each agent's own config with backups. Read its output back to the person, then go to Step 6.
 
 For Claude Code, if the Batcave plugin is not installed yet, tell the person to run these two commands in Claude Code and then restart it, since you cannot run slash commands for them:
 

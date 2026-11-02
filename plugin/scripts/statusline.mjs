@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Claude Code status line: "● acme · 4 online · 1 request · T-11 running"
+// Claude Code status line: "● wayne · 4 online · 1 request · T-11 running"
 // Cached for 10s so it stays instant. Prints nothing if Batcave is not set up.
 import fs from 'node:fs';
 import path from 'node:path';

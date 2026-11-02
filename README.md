@@ -6,7 +6,7 @@
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-141413?style=flat-square"></a>
   <img alt="Node 18+" src="https://img.shields.io/badge/node-18%2B-141413?style=flat-square">
   <img alt="Zero dependencies" src="https://img.shields.io/badge/dependencies-0-141413?style=flat-square">
-  <img alt="Supported agents: 9" src="https://img.shields.io/badge/agents-9-D97757?style=flat-square">
+  <img alt="Supported agents: 7" src="https://img.shields.io/badge/agents-7-D97757?style=flat-square">
   <img alt="MCP server" src="https://img.shields.io/badge/MCP-server-D97757?style=flat-square">
 </p>
 
@@ -23,7 +23,8 @@
 
 Everyone keeps their own agent, their own machine and their own account. Batcave shares state, never credentials, and never runs one person's agent for another.
 
-<p align="center"><img src="docs/assets/terminal.gif" alt="A coding agent using Batcave: board, claim, guard and request" width="90%"></p>
+<p align="center"><img src="docs/assets/terminal.gif" alt="Aman on Claude Code and Tim on Codex sharing one Batcave: team context, board, claim, guard, decision, request, handoff, pulse and stats" width="100%"></p>
+<p align="center"><sub>Simulated session. Aman runs Claude Code, Tim runs Codex. Both see the same board, decisions and requests; Batcave's hooks print the team context and the guard, and each status line tracks the team.</sub></p>
 
 ## Works with
 
@@ -35,7 +36,6 @@ Everyone keeps their own agent, their own machine and their own account. Batcave
 | Cursor | `batcave init` | session start, after tool calls | ✓ | blocks once |
 | GitHub Copilot CLI | `batcave init` | session start, after tool calls | ✓ | asks |
 | OpenCode | `batcave init` | `AGENTS.md` and tools | ✓ | blocks once |
-| Kiro, Windsurf | `batcave init` | steering file or `AGENTS.md` | tools only | not yet |
 | Any MCP client | manual | `AGENTS.md` | tools only | no |
 
 *Blocks once* is for agents whose hooks cannot pause for a question: Batcave stops the first edit, the agent explains why, and the retry goes through if you approve.
@@ -46,7 +46,7 @@ Everyone keeps their own agent, their own machine and their own account. Batcave
 
 ```bash
 git clone https://github.com/solanki-aman/batcave && cd batcave
-export BATCAVE_TEAM=acme
+export BATCAVE_TEAM=wayne
 export BATCAVE_TEAM_TOKEN=$(node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))")
 node server/src/index.mjs
 ```
@@ -140,7 +140,6 @@ Alfred only advises. It never blocks an edit, grants access or accepts a request
 - Follow mode: watch a teammate's agent live, read only
 - Shared plans whose steps become cards
 - Shared preview of a teammate's running app
-- Hooks for Kiro and Windsurf
 - Per-user tokens, SSO, multiple teams per server, Postgres
 - GitHub sync for issues and merges
 

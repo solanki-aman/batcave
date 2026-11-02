@@ -288,42 +288,6 @@ export const Batcave = async ({ directory }) => {
     },
   },
 
-  kiro: {
-    label: 'Kiro',
-    level: 'tools',
-    mcpFile: path.join(HOME, '.kiro', 'settings', 'mcp.json'),
-    steering: path.join(HOME, '.kiro', 'steering', 'batcave.md'),
-    detect() { return fs.existsSync(path.join(HOME, '.kiro')) || onPath('kiro'); },
-    install(rt) {
-      const m = readJson(this.mcpFile);
-      m.mcpServers = { ...(m.mcpServers || {}), batcave: mcpEntry(rt) };
-      writeJson(this.mcpFile, m);
-      writeOwned(this.steering, `---\ninclusion: always\n---\n\n${AGENT_INSTRUCTIONS}`);
-      return { wrote: [this.mcpFile, this.steering] };
-    },
-    uninstall() {
-      if (fs.existsSync(this.mcpFile)) { const m = readJson(this.mcpFile); if (m.mcpServers) delete m.mcpServers.batcave; writeJson(this.mcpFile, m); }
-      removeFile(this.steering);
-      return { wrote: [this.mcpFile, this.steering] };
-    },
-  },
-
-  windsurf: {
-    label: 'Windsurf',
-    level: 'tools',
-    mcpFile: path.join(HOME, '.codeium', 'windsurf', 'mcp_config.json'),
-    detect() { return fs.existsSync(path.join(HOME, '.codeium', 'windsurf')); },
-    install(rt) {
-      const m = readJson(this.mcpFile);
-      m.mcpServers = { ...(m.mcpServers || {}), batcave: mcpEntry(rt) };
-      writeJson(this.mcpFile, m);
-      return { wrote: [this.mcpFile] };
-    },
-    uninstall() {
-      if (fs.existsSync(this.mcpFile)) { const m = readJson(this.mcpFile); if (m.mcpServers) delete m.mcpServers.batcave; writeJson(this.mcpFile, m); }
-      return { wrote: [this.mcpFile] };
-    },
-  },
 };
 
 // Add or replace the Batcave block in a repo's AGENTS.md (read by Codex, Cursor, Copilot, OpenCode and others).

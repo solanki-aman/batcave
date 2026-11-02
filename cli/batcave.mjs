@@ -145,7 +145,7 @@ async function printStats() {
 const HELP = `batcave: multiplayer coding agents
 
 Setup
-  batcave init [--agent auto|all|claude,codex,gemini,cursor,copilot,opencode,kiro,windsurf]
+  batcave init [--agent auto|all|claude,codex,gemini,cursor,copilot,opencode]
                [--url URL --token TOKEN --user HANDLE --name NAME] [--repo]
       Connect this machine to your team and wire Batcave into your agents.
       --agent defaults to every agent found on this machine.
@@ -198,7 +198,7 @@ switch (cmd) {
       const inst = INSTALLERS[name];
       try {
         const r = inst.install(rt);
-        out(`✓ ${inst.label}${inst.level === 'tools' ? '  (tools only: no automatic presence or guard yet)' : ''}`);
+        out(`✓ ${inst.label}`);
         for (const w of r.wrote || []) out(`    ${w}`);
         for (const m of r.manual || []) out(`    ${m}`);
       } catch (e) { out(`✗ ${inst.label}: ${e.message}`); }
@@ -222,10 +222,10 @@ switch (cmd) {
   }
 
   case 'agents': {
-    out('Agent                      Support          Found here');
+    out('Agent                      Found here');
     for (const [, inst] of Object.entries(INSTALLERS)) {
       let found = false; try { found = inst.detect(); } catch {}
-      out(`${inst.label.padEnd(27)}${(inst.level === 'full' ? 'full' : 'tools only').padEnd(17)}${found ? 'yes' : '-'}`);
+      out(`${inst.label.padEnd(27)}${found ? 'yes' : '-'}`);
     }
     break;
   }

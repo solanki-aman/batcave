@@ -99,7 +99,7 @@ The server is one process with a JSON file for state. Back up the data volume.
 docker build -t batcave server
 docker run -d --name batcave -p 4777:4777 \
   -v batcave-data:/data \
-  -e BATCAVE_TEAM=acme -e BATCAVE_TEAM_TOKEN=<token> \
+  -e BATCAVE_TEAM=wayne -e BATCAVE_TEAM_TOKEN=<token> \
   batcave
 ```
 

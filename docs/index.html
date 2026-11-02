@@ -204,7 +204,7 @@ footer a{color:var(--muted)}
       <a class="btn" href="https://github.com/solanki-aman/batcave">View on GitHub</a>
     </div>
     <div class="cmd"><span class="dollar">$</span><code id="cmd1">npx github:solanki-aman/batcave init</code><button class="copy" data-copy="cmd1" type="button">Copy</button></div>
-    <div class="meta"><span>Zero dependencies</span><span>Node 18+</span><span>9 agents</span><span>Self-hosted</span></div>
+    <div class="meta"><span>Zero dependencies</span><span>Node 18+</span><span>7 agents</span><span>Self-hosted</span></div>
   </div>
 </header>
 
@@ -230,23 +230,23 @@ footer a{color:var(--muted)}
       </div>
       <div class="board" role="img" aria-label="Kanban board: card T-9 moves from Claimed to Agent running, In review and Done">
         <div class="bar">
-          <span class="mono" style="color:var(--muted);font-size:13px">acme-web · board</span>
+          <span class="mono" style="color:var(--muted);font-size:13px">wayne-tech · board</span>
           <span class="who">
-            <span class="av" style="background:#F2B544">AS</span><span class="av" style="background:#7FD1E3">NK</span><span class="av" style="background:#ECEAE4">PR</span><span class="av" style="background:#9BD48E">LW</span>
+            <span class="av" style="background:#F2B544">AS</span><span class="av" style="background:#7FD1E3">TD</span><span class="av" style="background:#ECEAE4">BG</span><span class="av" style="background:#9BD48E">LF</span>
           </span>
         </div>
         <div class="lanes" id="lanes">
           <div class="lane"><h4>Claimed</h4>
             <div class="card" style="visibility:hidden"><div class="id">.</div><div class="t">.</div><div class="row">.</div></div>
-            <div class="card"><div class="id">T-5 · plan step 5</div><div class="t">Checkout copy pass</div><div class="row"><span class="av" style="background:#ECEAE4">PR</span>Priya</div></div>
+            <div class="card"><div class="id">T-5 · plan step 5</div><div class="t">Checkout copy pass</div><div class="row"><span class="av" style="background:#ECEAE4">BG</span>Barbara</div></div>
           </div>
           <div class="lane"><h4>Running</h4>
             <div class="card" style="visibility:hidden"><div class="id">.</div><div class="t">.</div><div class="row">.</div></div>
-            <div class="card"><div class="id">T-4 · plan step 2</div><div class="t">Audit surface tokens</div><div class="row"><span class="av" style="background:#7FD1E3">NK</span>Codex</div></div>
+            <div class="card"><div class="id">T-4 · plan step 2</div><div class="t">Audit surface tokens</div><div class="row"><span class="av" style="background:#7FD1E3">TD</span>Codex</div></div>
           </div>
           <div class="lane"><h4>Review</h4>
             <div class="card" style="visibility:hidden"><div class="id">.</div><div class="t">.</div><div class="row">.</div></div>
-            <div class="card"><div class="id">T-6 · issue #362</div><div class="t">Refund webhook retries</div><div class="row"><span class="av" style="background:#9BD48E">LW</span>PR #409</div></div>
+            <div class="card"><div class="id">T-6 · issue #362</div><div class="t">Refund webhook retries</div><div class="row"><span class="av" style="background:#9BD48E">LF</span>PR #409</div></div>
           </div>
           <div class="lane"><h4>Done</h4>
             <div class="card" style="visibility:hidden"><div class="id">.</div><div class="t">.</div><div class="row">.</div></div>
@@ -265,18 +265,18 @@ footer a{color:var(--muted)}
       <div>
         <span class="eyebrow">The guard</span>
         <h2 class="reveal">Different vendors. One guard.</h2>
-        <p class="sub reveal">Nate runs Codex. Aman runs Claude Code. When Aman's agent reaches for a file Nate's agent changed four minutes ago, Batcave stops and asks first.</p>
+        <p class="sub reveal">Tim runs Codex. Aman runs Claude Code. When Aman's agent reaches for a file Tim's agent changed four minutes ago, Batcave stops and asks first.</p>
         <div class="steps" id="guardSteps">
-          <div class="step on"><b>Nate's agent edits</b><span>The edit is recorded: who, which task, when.</span></div>
+          <div class="step on"><b>Tim's agent edits</b><span>The edit is recorded: who, which task, when.</span></div>
           <div class="step"><b>Aman's agent reaches for it</b><span>The pre-edit hook checks with the team.</span></div>
           <div class="step"><b>Batcave asks first</b><span>Aman decides. No silent overwrite.</span></div>
-          <div class="step"><b>They talk</b><span>The question lands in Nate's room instead.</span></div>
+          <div class="step"><b>They talk</b><span>The question lands in Tim's room instead.</span></div>
         </div>
       </div>
       <div>
         <div class="terms">
-          <div class="term" aria-label="Nate's terminal running Codex">
-            <div class="tb"><i></i><i></i><i></i><span>nate · codex</span></div>
+          <div class="term" aria-label="Tim's terminal running Codex">
+            <div class="tb"><i></i><i></i><i></i><span>tim · codex</span></div>
             <div class="body" id="t1">
               <div class="ln" data-at="0.02"><span class="p">›</span> audit the surface tokens for dark mode</div>
               <div class="ln" data-at="0.08"><span class="t">●</span> Read src/theme/tokens.ts</div>
@@ -291,8 +291,8 @@ footer a{color:var(--muted)}
               <div class="ln" data-at="0.30"><span class="p">›</span> make the receipt email follow the dark theme</div>
               <div class="ln" data-at="0.38"><span class="t">●</span> Read src/emails/receipt.tsx</div>
               <div class="ln" data-at="0.46"><span class="t">●</span> Update src/theme/tokens.ts</div>
-              <div class="ln guard" data-at="0.54"><b>Batcave guard</b>  Nate's agent edited this 4m ago (T-4). Allow this edit?  <b>no</b></div>
-              <div class="ln" data-at="0.68"><span class="t">●</span> Skipped. Asked Nate in his room.</div>
+              <div class="ln guard" data-at="0.54"><b>Batcave guard</b>  Tim's agent edited this 4m ago (T-4). Allow this edit?  <b>no</b></div>
+              <div class="ln" data-at="0.68"><span class="t">●</span> Skipped. Asked Tim in his room.</div>
               <div class="ln" data-at="0.76"><span class="t">●</span> Update src/emails/receipt.tsx <span class="g">+24 -6</span></div>
             </div>
           </div>
@@ -347,7 +347,6 @@ footer a{color:var(--muted)}
       <div class="agent reveal"><span class="n">Cursor</span><span class="how">batcave init</span><span class="tag full">full support</span></div>
       <div class="agent reveal"><span class="n">GitHub Copilot CLI</span><span class="how">batcave init</span><span class="tag full">full support</span></div>
       <div class="agent reveal"><span class="n">OpenCode</span><span class="how">batcave init</span><span class="tag full">full support</span></div>
-      <div class="agent reveal"><span class="n">Kiro · Windsurf</span><span class="how">batcave init</span><span class="tag">tools</span></div>
     </div>
   </div>
 </section>
@@ -364,7 +363,7 @@ footer a{color:var(--muted)}
     <div class="panel" role="tabpanel" id="p-server" aria-labelledby="tab-server">
       <div class="head"><p>One person, once per team. No dependencies to install.</p><button class="copy" data-copy="code-server" type="button">Copy</button></div>
 <pre id="code-server">git clone https://github.com/solanki-aman/batcave && cd batcave
-export BATCAVE_TEAM=acme
+export BATCAVE_TEAM=wayne
 export BATCAVE_TEAM_TOKEN=$(node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))")
 node server/src/index.mjs</pre>
       <p>For a real team, run the Dockerfile in <code class="mono">server/</code> behind HTTPS and share the URL and token privately.</p>
@@ -376,7 +375,7 @@ node server/src/index.mjs</pre>
 /batcave:setup</pre>
     </div>
     <div class="panel" role="tabpanel" id="p-other" aria-labelledby="tab-other" hidden>
-      <div class="head"><p>Finds Codex, Gemini CLI, Antigravity, Cursor, Copilot CLI, OpenCode, Kiro and Windsurf, and wires each one up.</p><button class="copy" data-copy="code-other" type="button">Copy</button></div>
+      <div class="head"><p>Finds Codex, Gemini CLI, Antigravity, Cursor, Copilot CLI and OpenCode, and wires each one up.</p><button class="copy" data-copy="code-other" type="button">Copy</button></div>
 <pre id="code-other">npx github:solanki-aman/batcave init \
   --url https://batcave.example.com --token &lt;team token&gt; \
   --user aman --name "Aman" --repo</pre>

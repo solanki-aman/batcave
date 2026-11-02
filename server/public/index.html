@@ -96,7 +96,7 @@ table.lat td:first-child,table.lat th:first-child{text-align:left;font-family:'J
 const S = { view: 'board', room: 'team', state: null, messages: [] };
 const ls = { get(k){ try { return localStorage.getItem(k) || ''; } catch { return S['_'+k] || ''; } }, set(k,v){ try { localStorage.setItem(k,v); } catch { S['_'+k]=v; } } };
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const TOOLS = { claude: 'Claude Code', codex: 'Codex', gemini: 'Gemini CLI', antigravity: 'Antigravity', cursor: 'Cursor', copilot: 'Copilot CLI', opencode: 'OpenCode', kiro: 'Kiro', windsurf: 'Windsurf', cli: 'terminal' };
+const TOOLS = { claude: 'Claude Code', codex: 'Codex', gemini: 'Gemini CLI', antigravity: 'Antigravity', cursor: 'Cursor', copilot: 'Copilot CLI', opencode: 'OpenCode', cli: 'terminal' };
 const AV = ['#141413','#E3DACC','#87867F','#CBCADB','#BCD1CA','#EBCECE','#D97757'];
 const avColor = (id) => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; const bg = AV[h % AV.length]; return `background:${bg};color:${bg==='#141413'?'#FAF9F5':'#141413'}`; };
 const initials = (n) => esc(String(n||'?').split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase());
